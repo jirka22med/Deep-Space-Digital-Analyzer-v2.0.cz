@@ -24,8 +24,9 @@ body {
     margin: 0;
     display: flex;
     flex-direction: column;
-    height: 100vh;
-    overflow: hidden;
+    min-height: 100vh;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 /* ============================================
@@ -43,6 +44,8 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    position: relative;
+    z-index: 10;
 }
 
 /* Status indikátory */
@@ -87,6 +90,8 @@ body {
     align-items: center;
     border-bottom: 1px solid #333;
     flex-wrap: wrap;
+    position: relative;
+    z-index: 10;
 }
 
 audio {
@@ -140,8 +145,8 @@ input[type="range"] {
     grid-template-rows: auto;
     gap: 15px;
     padding: 15px;
+    padding-bottom: 30px;
     flex-grow: 1;
-    overflow-y: auto;
 }
 
 /* ============================================
@@ -273,7 +278,7 @@ input[type="range"] {
 
 .vu-bar-container {
     width: 40px;
-    height: 80px;
+    height: 200px;
     background: #0a0a0a;
     border: 2px solid #333;
     border-radius: 5px;
@@ -437,6 +442,7 @@ input[type="range"] {
     .main-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 10px;
+        padding-bottom: 20px;
     }
     
     .box.triple,
@@ -477,6 +483,12 @@ input[type="range"] {
         padding: 15px;
         gap: 15px;
     }
+    
+    /* VU metry menší na tabletech */
+    .vu-bar-container {
+        height: 150px;
+        width: 35px;
+    }
 }
 
 /* 📱 Tablety na výšku (600px - 768px) */
@@ -491,6 +503,7 @@ input[type="range"] {
     .main-grid {
         grid-template-columns: 1fr;
         gap: 10px;
+        padding-bottom: 20px;
     }
     
     .box.triple,
@@ -503,9 +516,10 @@ input[type="range"] {
         grid-template-columns: 1fr 1fr;
     }
     
+    /* VU metry menší na tabletech portrait */
     .vu-bar-container {
-        height: 120px;
-        width: 35px;
+        height: 100px;
+        width: 30px;
     }
     
     /* VU Meters na 60% */
@@ -532,8 +546,7 @@ input[type="range"] {
 /* 📱 Mobily na šířku (480px - 767px) */
 @media screen and (max-width: 767px) and (orientation: landscape) {
     body {
-        height: auto;
-        overflow-y: auto;
+        min-height: 100vh;
     }
     
     .header {
@@ -559,8 +572,7 @@ input[type="range"] {
         grid-template-columns: 1fr;
         gap: 8px;
         padding: 8px;
-        overflow-y: auto;
-        max-height: calc(100vh - 180px);
+        padding-bottom: 20px;
     }
     
     .box {
@@ -574,6 +586,12 @@ input[type="range"] {
     
     #waveform {
         height: 80px;
+    }
+    
+    /* VU metry menší na mobilech landscape */
+    .vu-bar-container {
+        height: 80px;
+        width: 25px;
     }
     
     /* VU Meters na 70% */
@@ -626,6 +644,7 @@ input[type="range"] {
         grid-template-columns: 1fr;
         gap: 8px;
         padding: 8px;
+        padding-bottom: 20px;
     }
     
     .box.triple,
@@ -662,9 +681,10 @@ input[type="range"] {
         gap: 15px;
     }
     
+    /* VU metry menší na mobilech portrait */
     .vu-bar-container {
-        height: 120px;
-        width: 30px;
+        height: 80px;
+        width: 25px;
     }
     
     .vu-label {
@@ -724,9 +744,10 @@ input[type="range"] {
         height: 60px;
     }
     
+    /* VU metry extra malé */
     .vu-bar-container {
-        height: 100px;
-        width: 25px;
+        height: 70px;
+        width: 22px;
     }
     
     .info-value {

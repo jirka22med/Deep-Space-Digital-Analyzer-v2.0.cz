@@ -1,0 +1,797 @@
+/* ============================================
+   🎨 CSS PROMĚNNÉ - LCARS COLOR SCHEME
+   ============================================ */
+:root {
+    --gold: #ffcc00;
+    --blue: #4477ff;
+    --red: #ff4444;
+    --bg: #050505;
+    --panel-bg: #111;
+    --orange: #ff9900;
+}
+
+/* ============================================
+   🌍 GLOBÁLNÍ STYLY
+   ============================================ */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    background: var(--bg);
+    color: white;
+    font-family: 'Segoe UI', sans-serif;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* ============================================
+   📋 HLAVIČKA (HEADER)
+   ============================================ */
+.header {
+    background: linear-gradient(90deg, var(--gold) 0%, var(--orange) 100%);
+    color: black;
+    padding: 15px 20px;
+    font-weight: bold;
+    font-size: 1.8em;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    border-bottom: 5px solid var(--red);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Status indikátory */
+.status-indicator {
+    display: flex;
+    gap: 10px;
+    font-size: 0.5em;
+}
+
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+.status-dot.active {
+    background: #00ff00;
+}
+
+.status-dot.standby {
+    background: var(--gold);
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.3;
+    }
+}
+
+/* ============================================
+   🎛️ OVLÁDACÍ PANEL (CONTROLS)
+   ============================================ */
+.controls {
+    padding: 15px;
+    background: #1a1a1a;
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    border-bottom: 1px solid #333;
+    flex-wrap: wrap;
+}
+
+audio {
+    width: 400px;
+    height: 40px;
+    border-radius: 5px;
+}
+
+/* Tlačítka */
+.btn {
+    background: var(--blue);
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    cursor: pointer;
+    border-radius: 5px;
+    font-weight: bold;
+    transition: all 0.3s;
+}
+
+.btn:hover {
+    background: var(--gold);
+    color: black;
+    transform: scale(1.05);
+}
+
+.btn.active {
+    background: var(--red);
+}
+
+/* Inputy */
+input[type="file"] {
+    background: #333;
+    color: white;
+    padding: 8px;
+    border: 1px solid var(--blue);
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+input[type="range"] {
+    width: 150px;
+}
+
+/* ============================================
+   📊 HLAVNÍ GRID LAYOUT
+   ============================================ */
+.main-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: auto;
+    gap: 15px;
+    padding: 15px;
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+/* ============================================
+   📦 BOXY (PANELY)
+   ============================================ */
+.box {
+    background: var(--panel-bg);
+    border: 2px solid #333;
+    border-radius: 8px;
+    padding: 15px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 250px;
+}
+
+.box-title {
+    color: var(--blue);
+    border-bottom: 2px solid var(--blue);
+    margin-bottom: 10px;
+    font-weight: bold;
+    font-size: 1.1em;
+    padding-bottom: 5px;
+}
+
+/* Speciální velikosti boxů */
+.box.wide {
+    grid-column: span 2;
+}
+
+.box.full {
+    grid-column: span 4;
+}
+
+.box.triple {
+    grid-column: span 3;
+}
+
+/* ============================================
+   🎵 VIZUALIZAČNÍ KOMPONENTY
+   ============================================ */
+
+/* Waveform */
+#waveform {
+    width: 100%;
+    height: 150px;
+    background: #0a0a0a;
+    border-radius: 5px;
+}
+
+/* D3 Frequency Spectrum */
+#d3_viz {
+    display: flex;
+    align-items: flex-end;
+    height: 100%;
+    gap: 2px;
+}
+
+.bar {
+    width: 100%;
+    background: var(--gold);
+    transition: height 0.05s ease;
+}
+
+/* Three.js kontejner */
+#threeContainer {
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+/* Plotly Spectrogram */
+#spectrogramPlot {
+    width: 100%;
+    height: 300px;
+}
+
+/* ============================================
+   📈 INFO PANELY
+   ============================================ */
+.info-panel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.info-item {
+    background: #1a1a1a;
+    padding: 10px;
+    border-radius: 5px;
+    border-left: 3px solid var(--gold);
+}
+
+.info-label {
+    color: #888;
+    font-size: 0.9em;
+}
+
+.info-value {
+    color: var(--gold);
+    font-size: 1.3em;
+    font-weight: bold;
+}
+
+/* ============================================
+   🎚️ VU METRY (LEVEL METERS)
+   ============================================ */
+.vu-container {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    align-items: flex-end;
+    height: 100%;
+    padding: 20px;
+}
+
+.vu-meter {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.vu-label {
+    color: var(--gold);
+    font-weight: bold;
+    font-size: 1.2em;
+}
+
+.vu-bar-container {
+    width: 40px;
+    height: 80px;
+    background: #0a0a0a;
+    border: 2px solid #333;
+    border-radius: 5px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column-reverse;
+}
+
+.vu-bar {
+    width: 100%;
+    transition: height 0.1s ease;
+    position: relative;
+}
+
+.vu-segments {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.vu-segment {
+    flex: 1;
+    border-bottom: 1px solid #222;
+}
+
+.vu-level-text {
+    color: #666;
+    font-size: 0.8em;
+    margin-top: 5px;
+}
+
+/* ============================================
+   🎯 SPECIFICKÉ KONTEJNERY - FINÁLNÍ OPRAVA!
+   ============================================ */
+#kontejner0 {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    background-color: var(--bg);
+    border-top: 5px solid var(--orange);
+}
+
+/* ⚡ Kontejnery 1 a 5 - zúžené na 75% */
+#kontejner1, #kontejner5 {
+    height: 100%;
+    width: 75%;
+    margin: 0 auto;
+    overflow: hidden;
+}
+
+/* ⚡ Kontejnery 2-3-4 - plná šířka v gridu */
+#kontejner2, #kontejner3, #kontejner4 { 
+    height: 100%;
+    width: 100%;
+    margin: 0 auto;
+    overflow: hidden;
+}
+
+/* 🎚️ VU METERS - taky na plnou šířku */
+.main-grid > .box:first-child {
+    width: 100%;
+    margin: 0 auto;
+}
+
+/* ============================================
+   📱 RESPONSIVE DESIGN - OPTIMALIZOVANÉ MEDIA QUERIES
+   ============================================ */
+
+/* 💻 Velké notebooky (1440px - 1920px) */
+@media screen and (min-width: 1441px) and (max-width: 1920px) {
+    .main-grid {
+        gap: 20px;
+        padding: 20px;
+    }
+    
+    /* VU Meters wrapper taky 35% */
+    .main-grid > .box:first-child {
+        width: 35%;
+    }
+    
+    /* Kontejnery 1 a 5 širší */
+    #kontejner1, #kontejner5 {
+        width: 80% !important;
+    }
+    
+    /* Wrapper pro kontejnery 2-3-4 taky širší */
+    .main-grid > div[style*="grid-column: 1 / -1"] {
+        width: 80% !important;
+    }
+}
+
+/* 💻 Střední notebooky (1024px - 1440px) */
+@media screen and (max-width: 1440px) {
+    .header {
+        font-size: 1.5em;
+        padding: 12px 15px;
+    }
+    
+    .main-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        padding: 12px;
+    }
+    
+    .box.triple {
+        grid-column: span 2;
+    }
+    
+    .box.full {
+        grid-column: span 3;
+    }
+    
+    /* VU Meters na 40% */
+    .main-grid > .box:first-child {
+        width: 40% !important;
+    }
+    
+    /* Kontejnery 1 a 5 na 85% */
+    #kontejner1, #kontejner5 {
+        width: 85% !important;
+    }
+    
+    /* Wrapper s kontejnery 2-3-4 na 85% */
+    .main-grid > div[style*="grid-column: 1 / -1"] {
+        width: 85% !important;
+    }
+}
+
+/* 📱 Tablety na šířku (768px - 1024px) */
+@media screen and (max-width: 1024px) {
+    .header {
+        font-size: 1.3em;
+        padding: 10px;
+    }
+    
+    .controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+    
+    audio {
+        width: 100%;
+    }
+    
+    input[type="range"] {
+        width: 100%;
+    }
+    
+    .main-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    
+    .box.triple,
+    .box.wide {
+        grid-column: span 2;
+    }
+    
+    .box.full {
+        grid-column: span 2;
+    }
+    
+    .box {
+        min-height: 200px;
+    }
+    
+    #waveform {
+        height: 100px;
+    }
+    
+    /* VU Meters na 50% */
+    .main-grid > .box:first-child {
+        width: 50% !important;
+    }
+    
+    /* Kontejnery 1 a 5 na 90% */
+    #kontejner1, #kontejner5 {
+        width: 90% !important;
+    }
+    
+    /* Wrapper s kontejnery 2-3-4 */
+    .main-grid > div[style*="grid-column: 1 / -1"] {
+        width: 90% !important;
+        grid-template-columns: 1fr !important; /* Na tabletu pod sebou */
+        gap: 10px !important;
+    }
+    
+    .vu-container {
+        padding: 15px;
+        gap: 15px;
+    }
+}
+
+/* 📱 Tablety na výšku (600px - 768px) */
+@media screen and (max-width: 768px) {
+    .header {
+        font-size: 1.2em;
+        padding: 10px;
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .main-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .box.triple,
+    .box.wide,
+    .box.full {
+        grid-column: span 1;
+    }
+    
+    .info-panel {
+        grid-template-columns: 1fr 1fr;
+    }
+    
+    .vu-bar-container {
+        height: 120px;
+        width: 35px;
+    }
+    
+    /* VU Meters na 60% */
+    .main-grid > .box:first-child {
+        width: 60% !important;
+    }
+    
+    /* Kontejnery 1 a 5 na 95% */
+    #kontejner1, #kontejner5 {
+        width: 95% !important;
+    }
+    
+    /* Wrapper už není potřeba, protože je všechno pod sebou */
+    .main-grid > div[style*="grid-column: 1 / -1"] {
+        width: 95% !important;
+        grid-template-columns: 1fr !important;
+    }
+    
+    #spectrogramPlot {
+        height: 250px;
+    }
+}
+
+/* 📱 Mobily na šířku (480px - 767px) */
+@media screen and (max-width: 767px) and (orientation: landscape) {
+    body {
+        height: auto;
+        overflow-y: auto;
+    }
+    
+    .header {
+        font-size: 1em;
+        padding: 8px;
+    }
+    
+    .status-indicator {
+        display: none;
+    }
+    
+    .controls {
+        padding: 8px;
+        gap: 8px;
+    }
+    
+    .btn {
+        padding: 6px 10px;
+        font-size: 0.9em;
+    }
+    
+    .main-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 8px;
+        overflow-y: auto;
+        max-height: calc(100vh - 180px);
+    }
+    
+    .box {
+        min-height: 150px;
+        padding: 10px;
+    }
+    
+    .box-title {
+        font-size: 0.9em;
+    }
+    
+    #waveform {
+        height: 80px;
+    }
+    
+    /* VU Meters na 70% */
+    .main-grid > .box:first-child {
+        width: 70% !important;
+    }
+    
+    /* Vše na 98% - mobil landscape využije maximum */
+    #kontejner1, #kontejner5 {
+        width: 98% !important;
+    }
+    
+    .main-grid > div[style*="grid-column: 1 / -1"] {
+        width: 98% !important;
+    }
+    
+    #spectrogramPlot {
+        height: 200px;
+    }
+}
+
+/* 📱 Mobily na výšku (< 480px) */
+@media screen and (max-width: 480px) {
+    .header {
+        font-size: 0.9em;
+        padding: 8px;
+        letter-spacing: 1px;
+    }
+    
+    .status-indicator {
+        display: none;
+    }
+    
+    .controls {
+        padding: 8px;
+        gap: 8px;
+    }
+    
+    audio {
+        height: 35px;
+    }
+    
+    .btn {
+        padding: 6px 10px;
+        font-size: 0.85em;
+        width: 100%;
+    }
+    
+    .main-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 8px;
+    }
+    
+    .box.triple,
+    .box.wide,
+    .box.full {
+        grid-column: span 1;
+    }
+    
+    .box {
+        min-height: 180px;
+        padding: 10px;
+    }
+    
+    .box-title {
+        font-size: 0.9em;
+        margin-bottom: 8px;
+    }
+    
+    #waveform {
+        height: 80px;
+    }
+    
+    .info-panel {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    
+    .info-value {
+        font-size: 1.1em;
+    }
+    
+    .vu-container {
+        padding: 10px;
+        gap: 15px;
+    }
+    
+    .vu-bar-container {
+        height: 120px;
+        width: 30px;
+    }
+    
+    .vu-label {
+        font-size: 1em;
+    }
+    
+    #d3_viz {
+        gap: 1px;
+    }
+    
+    #threeContainer {
+        min-height: 200px;
+    }
+    
+    /* VU Meters na 80% - mobil portrait */
+    .main-grid > .box:first-child {
+        width: 80% !important;
+    }
+    
+    /* Vše na plnou šířku - mobil portrait */
+    #kontejner1, #kontejner5 {
+        width: 100% !important;
+    }
+    
+    .main-grid > div[style*="grid-column: 1 / -1"] {
+        width: 100% !important;
+    }
+    
+    #spectrogramPlot {
+        height: 180px;
+    }
+}
+
+/* 📱 Extra malé mobily (< 360px) */
+@media screen and (max-width: 360px) {
+    .header {
+        font-size: 0.8em;
+        padding: 6px;
+        letter-spacing: 0.5px;
+    }
+    
+    .btn {
+        font-size: 0.8em;
+        padding: 5px 8px;
+    }
+    
+    .box {
+        padding: 8px;
+        min-height: 150px;
+    }
+    
+    .box-title {
+        font-size: 0.85em;
+    }
+    
+    #waveform {
+        height: 60px;
+    }
+    
+    .vu-bar-container {
+        height: 100px;
+        width: 25px;
+    }
+    
+    .info-value {
+        font-size: 1em;
+    }
+    
+    /* VU Meters na 90% - extra malé mobily */
+    .main-grid > .box:first-child {
+        width: 90% !important;
+    }
+    
+    /* Vše na plnou šířku */
+    #kontejner1, #kontejner5 {
+        width: 100% !important;
+    }
+    
+    .main-grid > div[style*="grid-column: 1 / -1"] {
+        width: 100% !important;
+    }
+    
+    #spectrogramPlot {
+        height: 150px;
+    }
+}
+
+/* 🖥️ Ultra-wide monitory (> 1920px) */
+@media screen and (min-width: 1921px) {
+    .header {
+        font-size: 2em;
+        padding: 20px 30px;
+    }
+    
+    .main-grid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 25px;
+        padding: 25px;
+        max-width: 2400px;
+        margin: 0 auto;
+    }
+    
+    .box {
+        min-height: 300px;
+    }
+    
+    #waveform {
+        height: 180px;
+    }
+    
+    /* VU Meters na 25% - ultra-wide */
+    .main-grid > .box:first-child {
+        width: 25% !important;
+    }
+    
+    /* Kontejnery 1 a 5 na 70% */
+    #kontejner1, #kontejner5 {
+        width: 70% !important;
+    }
+    
+    /* Wrapper s kontejnery 2-3-4 na 70% */
+    .main-grid > div[style*="grid-column: 1 / -1"] {
+        width: 70% !important;
+        grid-template-columns: repeat(3, 1fr) !important;
+    }
+    
+    #spectrogramPlot {
+        height: 350px;
+    }
+}

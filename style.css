@@ -489,6 +489,15 @@ input[type="range"] {
         height: 150px;
         width: 35px;
     }
+    
+    /* Radar menší na tabletech */
+    #radarChart {
+        max-height: 200px;
+    }
+    
+    #kontejner3 {
+        min-height: 250px !important;
+    }
 }
 
 /* 📱 Tablety na výšku (600px - 768px) */
@@ -540,6 +549,15 @@ input[type="range"] {
     
     #spectrogramPlot {
         height: 250px;
+    }
+    
+    /* Radar výrazně menší na tabletech portrait */
+    #radarChart {
+        max-height: 180px;
+    }
+    
+    #kontejner3 {
+        min-height: 230px !important;
     }
 }
 
@@ -610,6 +628,15 @@ input[type="range"] {
     
     #spectrogramPlot {
         height: 200px;
+    }
+    
+    /* Radar kompaktní na mobilech landscape */
+    #radarChart {
+        max-height: 150px;
+    }
+    
+    #kontejner3 {
+        min-height: 200px !important;
     }
 }
 
@@ -716,6 +743,15 @@ input[type="range"] {
     #spectrogramPlot {
         height: 180px;
     }
+    
+    /* Radar velmi kompaktní na mobilech portrait */
+    #radarChart {
+        max-height: 140px;
+    }
+    
+    #kontejner3 {
+        min-height: 190px !important;
+    }
 }
 
 /* 📱 Extra malé mobily (< 360px) */
@@ -770,6 +806,15 @@ input[type="range"] {
     
     #spectrogramPlot {
         height: 150px;
+    }
+    
+    /* Radar minimální na extra malých mobilech */
+    #radarChart {
+        max-height: 120px;
+    }
+    
+    #kontejner3 {
+        min-height: 170px !important;
     }
 }
 

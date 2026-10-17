@@ -23,6 +23,8 @@ const SCOPE_LANES = [
     { key: 'high',   label: 'VÝŠKY',  color: '#4477ff', gain: 4.0 },
     { key: 'vocals', label: 'VOKÁLY', color: '#ff9900', gain: 2.5 }
 ];
+// Automatické zesílení: lane.gain je minimum, lane.cur aktuální hodnota, lane.maxGain strop
+SCOPE_LANES.forEach((lane) => { lane.cur = lane.gain; lane.maxGain = 24; });
 
 // Pásma pro radar
 const RADAR_BANDS = [
@@ -312,9 +314,6 @@ class SpectrumRenderer {
                 ctx.moveTo(x, gy);
                 ctx.lineTo(x + w, gy);
                 ctx.stroke();
-                ctx.fillStyle = '#555';
-                ctx.textAlign = 'left';
-                ctx.fillText(`${Math.round(this.dbMin + frac * (this.dbMax - this.dbMin))} dB`, x + 3, gy - 3);
             }
         }
 
@@ -342,6 +341,20 @@ class SpectrumRenderer {
             if (ph > 1) {
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(bx, baseY - ph - 2, bw, 2);
+            }
+        }
+
+        // dB popisky až nad sloupci, na tmavém podkladu, ať je nic nezakrývá
+        if (this.labels) {
+            ctx.textAlign = 'left';
+            for (const frac of [0.25, 0.5, 0.75]) {
+                const gy = Math.round(baseY - frac * maxBar) + 0.5;
+                const txt = `${Math.round(this.dbMin + frac * (this.dbMax - this.dbMin))} dB`;
+                const tw = ctx.measureText(txt).width;
+                ctx.fillStyle = 'rgba(5,5,7,0.75)';
+                ctx.fillRect(x + 1, gy - 13, tw + 6, 12);
+                ctx.fillStyle = '#8a8a8a';
+                ctx.fillText(txt, x + 4, gy - 3);
             }
         }
 
@@ -405,7 +418,7 @@ function drawMainCanvas() {
         ctx.lineWidth = 1.6;
         ctx.beginPath();
         for (let j = 0; j < buf.length; j++) {
-            const v = clamp(((buf[j] - 128) / 128) * lane.gain, -1, 1);
+            const v = clamp(((buf[j] - 128) / 128) * lane.cur, -1, 1);
             const px = j * step;
             const py = cy - v * half;
             if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
@@ -662,7 +675,18 @@ function renderFrame(dt) {
 
     SCOPE_LANES.forEach((lane) => {
         const ana = scopeAnalysers[lane.key];
-        if (ana) ana.getByteTimeDomainData(scopeBuffers[lane.key]);
+        if (!ana) return;
+        const buf = scopeBuffers[lane.key];
+        ana.getByteTimeDomainData(buf);
+
+        // Auto-gain: tichá pásma se zvětší, hlasitá se hned stáhnou (nic nepřetéká)
+        let dev = 0;
+        for (let i = 0; i < buf.length; i++) {
+            const d = Math.abs(buf[i] - 128) / 128;
+            if (d > dev) dev = d;
+        }
+        const target = clamp(0.75 / Math.max(dev, 0.015), lane.gain, lane.maxGain);
+        lane.cur = target < lane.cur ? target : lane.cur + (target - lane.cur) * 0.04;
     });
 
     drawAll();
@@ -691,7 +715,7 @@ function resetVisuals() {
     resetVU();
     mainSpec.reset();
     miniSpec.reset();
-    SCOPE_LANES.forEach((lane) => scopeBuffers[lane.key].fill(128));
+    SCOPE_LANES.forEach((lane) => { scopeBuffers[lane.key].fill(128); lane.cur = lane.gain; });
     radarChart.data.datasets[0].data = RADAR_BANDS.map(() => 0);
     radarChart.update('none');
     resetInfoPanel();

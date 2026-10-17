@@ -197,7 +197,7 @@ input[type="range"] {
     border-radius: 5px;
 }
 
-/* D3 Frequency Spectrum */
+/* Mini spektrum (canvas) */
 #d3_viz {
     display: flex;
     align-items: flex-end;
@@ -218,10 +218,10 @@ input[type="range"] {
     position: relative;
 }
 
-/* Plotly Spectrogram */
+/* Spektrum + osciloskop (canvas) */
 #spectrogramPlot {
     width: 100%;
-    height: 300px;
+    height: 380px;
 }
 
 /* ============================================
@@ -548,7 +548,7 @@ input[type="range"] {
     }
     
     #spectrogramPlot {
-        height: 250px;
+        height: 300px;
     }
     
     /* Radar výrazně menší na tabletech portrait */
@@ -627,7 +627,7 @@ input[type="range"] {
     }
     
     #spectrogramPlot {
-        height: 200px;
+        height: 260px;
     }
     
     /* Radar kompaktní na mobilech landscape */
@@ -741,7 +741,7 @@ input[type="range"] {
     }
     
     #spectrogramPlot {
-        height: 180px;
+        height: 240px;
     }
     
     /* Radar velmi kompaktní na mobilech portrait */
@@ -805,7 +805,7 @@ input[type="range"] {
     }
     
     #spectrogramPlot {
-        height: 150px;
+        height: 200px;
     }
     
     /* Radar minimální na extra malých mobilech */
@@ -858,6 +858,53 @@ input[type="range"] {
     }
     
     #spectrogramPlot {
-        height: 350px;
+        height: 440px;
     }
+}
+
+
+/* ============================================
+   🆕 v3.0 - CANVAS VIZUALIZACE (styl Audio Editoru)
+   ============================================ */
+#spectrogramPlot,
+#d3_viz {
+    position: relative;
+}
+
+#d3_viz {
+    display: block;
+    flex: 1 1 auto;
+    min-height: 150px;
+    height: auto;
+}
+
+#d3_viz canvas,
+#spectrogramPlot canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+#spectrogramPlot {
+    background: #050507;
+    border-radius: 5px;
+    border: 1px solid #26282e;
+}
+
+.vu-peak {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: #ffffff;
+    z-index: 3;
+    display: none;
+    pointer-events: none;
+}
+
+.info-value {
+    font-variant-numeric: tabular-nums;
 }

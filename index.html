@@ -3,19 +3,16 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>LCARS | Deep Space Digital Analyzer v2.0</title>
+    <title>LCARS | Deep Space Digital Analyzer v3.0</title>
     <script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
     <link rel="icon" href="https://img40.rajce.idnes.cz/d4003/19/19517/19517492_984d6887838eae80a8eb677199393188/images/image_82x82_2.jpg?ver=0" type="image/png">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div class="header">
-    <span>🖖 LCARS DEEP SPACE ANALYZER v2.0</span>
+    <span>🖖 LCARS DEEP SPACE ANALYZER v3.0</span>
     <div class="status-indicator">
         <div class="status-dot active"></div>
         <div class="status-dot standby"></div>
@@ -26,10 +23,8 @@
     <input type="file" id="fileInput" accept="audio/*">
     <audio id="mainAudio" controls></audio>
     <button class="btn" id="toggle3D" style="display: none;">3D View: OFF</button>
-    <button class="btn" id="toggleEffect" style="display: none;">Effect: OFF</button>
     <button class="btn" id="exportBtn">📊 Export Analysis</button>
-    <label style="color: #888; display: none">Reverb:</label>
-    <input type="range" id="reverbLevel" style="display: none" min="0" max="100" value="0">
+    <button class="btn" id="exportCsvBtn">🧾 Export CSV</button>
 </div>
 
 <div class="main-grid">
@@ -39,7 +34,7 @@
         <div class="vu-container">
             <div class="vu-meter">
                 <div class="vu-label">L</div>
-                <div class="vu-bar-container">
+                <div class="vu-bar-container" id="vuLeftContainer">
                     <div class="vu-bar" id="vuLeft"></div>
                     <div class="vu-segments">
                         <div class="vu-segment"></div>
@@ -56,7 +51,7 @@
             </div>
             <div class="vu-meter">
                 <div class="vu-label">R</div>
-                <div class="vu-bar-container">
+                <div class="vu-bar-container" id="vuRightContainer">
                     <div class="vu-bar" id="vuRight"></div>
                     <div class="vu-segments">
                         <div class="vu-segment"></div>
@@ -82,8 +77,8 @@
     <!-- Wrapper pro centrování kontejnerů 2-3-4 -->
     <div style="grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; width: 75%; margin: 0 auto;">
         <div class="box" id="kontejner2">
-            <div class="box-title">🎵 Frequency Spectrum (D3.js)</div>
-            <div id="d3_viz"></div>
+            <div class="box-title">🎵 Frequency Spectrum</div>
+            <div id="d3_viz"><canvas id="miniSpectrumCanvas"></canvas></div>
         </div>
 
         <div class="box" id="kontejner3">
@@ -103,7 +98,31 @@
                 <div class="info-item">
                     <div class="info-label">Duration</div>
                     <div class="info-value" id="duration">00:00</div>
-                </div>  
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Sample Rate</div>
+                    <div class="info-value" id="sampleRate">--- Hz</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Position</div>
+                    <div class="info-value" id="curTime">0:00</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">RMS</div>
+                    <div class="info-value" id="rmsLevel">-∞ dBFS</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Peak</div>
+                    <div class="info-value" id="peakLevel">-∞ dBFS</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Stereo Balance</div>
+                    <div class="info-value" id="balance">---</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Centroid</div>
+                    <div class="info-value" id="centroid">--- Hz</div>
+                </div>
             </div>
         </div>
     </div>
@@ -112,11 +131,11 @@
     <div class="box triple" style="display: none;">
         <div class="box-title" style="display: none;">🌌 3D Spectral View (Three.js)</div>
         <div id="threeContainer" style="display: none;"></div>
-    </div>  
+    </div>
 
     <div class="box full" id="kontejner5" style="width: 75%; margin: 0 auto;">
-        <div class="box-title">🔥 Spectrogram (Plotly)</div>
-        <div id="spectrogramPlot"></div>
+        <div class="box-title">🔥 Spectrum + Oscilloscope (LCARS)</div>
+        <div id="spectrogramPlot"><canvas id="spectrumCanvas"></canvas></div>
     </div>
 </div>
 

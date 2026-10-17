@@ -1,689 +1,1015 @@
-const fileInput = document.getElementById('fileInput');
-    const audioElement = document.getElementById('mainAudio');
-    const toggle3DBtn = document.getElementById('toggle3D');
-    const toggleEffectBtn = document.getElementById('toggleEffect');
-    const reverbSlider = document.getElementById('reverbLevel');
-    const exportBtn = document.getElementById('exportBtn');
-    
-    let audioContext, analyser, source, dataArray;
-    let analyserLeft, analyserRight, splitter;
-    let dataArrayLeft, dataArrayRight;
-    let peakAnalyser, peakDataArray; // Pro true peak detection
-    let isContextReady = false;
-    let show3D = false;
-    let effectActive = false;
-    
-    // Data pro export
-    let exportData = [];
-    let isRecording = false;
-    let recordingStartTime = 0;
-    let recordingInterval = null;
-    
-    // Tone.js setup
-    let reverb, player;
-    
-    // Three.js variables
-    let scene, camera, renderer, bars3D = [];
-    
-    // Spectrogram data
-    let spectrogramData = [];
-    let spectrogramTime = [];
-    
-    // Wavesurfer
-    const wavesurfer = WaveSurfer.create({
-        container: '#waveform',
-        waveColor: '#4477ff',
-        progressColor: '#ffcc00',
-        cursorColor: '#ff4444',
-        barWidth: 3,
-        barGap: 2,
-        height: 120,
-        media: audioElement,
-        backend: 'WebAudio'
-    });
-
-    // Force waveform to load when audio is ready
-    audioElement.addEventListener('loadedmetadata', () => {
-        wavesurfer.load(audioElement.src);
-    });
-
-    // Chart.js Radar
-    const radarCtx = document.getElementById('radarChart').getContext('2d');
-    const radarChart = new Chart(radarCtx, {
-        type: 'radar',
-        data: {
-            labels: ['Sub-Bass', 'Bass', 'Low-Mid', 'Mid', 'High-Mid', 'Treble', 'Air'],
-            datasets: [{
-                label: 'Aktuální Energie',
-                data: [0, 0, 0, 0, 0, 0, 0],
-                backgroundColor: 'rgba(255, 204, 0, 0.4)',
-                borderColor: '#ffcc00',
-                borderWidth: 2,
-                pointRadius: 0
-            }]
-        },
-        options: {
-            scales: { r: { min: 0, max: 255, ticks: { display: false }, grid: { color: '#333' } } },
-            animation: false,
-            responsive: true,
-            maintainAspectRatio: false
-        }
-    });
-
-    // File input
-    fileInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            const objectUrl = URL.createObjectURL(file);
-            audioElement.src = objectUrl;
-            spectrogramData = [];
-            spectrogramTime = [];
-        }
-    });
-
-    // Audio metadata
-    audioElement.onloadedmetadata = () => {
-        const mins = Math.floor(audioElement.duration / 60);
-        const secs = Math.floor(audioElement.duration % 60);
-        document.getElementById('duration').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
-        
-        // Zobrazit sample rate když je context ready
-        if (audioContext) {
-            document.getElementById('sampleRate').textContent = audioContext.sampleRate + ' Hz';
-        }
-    };
-
-    // Play handler
-    audioElement.onplay = () => {
-        if (!isContextReady) {
-            setupAudioChain();
-            setupToneJS();
-            setup3D();
-            isContextReady = true;
-        }
-        if (audioContext.state === 'suspended') audioContext.resume();
-        
-        // Start recording s PŘESNÝM intervalem
-        isRecording = true;
-        recordingStartTime = audioElement.currentTime;
-        exportData = [];
-        
-        // Přesný interval 100ms (ne závislý na FPS!)
-        recordingInterval = setInterval(() => {
-            if (isRecording && !audioElement.paused) {
-                recordDataSnapshot(audioElement.currentTime);
-            }
-        }, 100); // PŘESNĚ 100ms
-        
-        renderLoop();
-    };
-
-    audioElement.onpause = () => {
-        isRecording = false;
-        if (recordingInterval) {
-            clearInterval(recordingInterval);
-            recordingInterval = null;
-        }
-    };
-
-    audioElement.onended = () => {
-        isRecording = false;
-        if (recordingInterval) {
-            clearInterval(recordingInterval);
-            recordingInterval = null;
-        }
-    };
-
-    /* ==========================================================================
-   KOMPLETNÍ AUDIO ENGINE - JIŘÍKŮV UPGRADE (VŠECH 207+ ŘÁDKŮ)
+'use strict';
+/* ==========================================================================
+   🖖 LCARS DEEP SPACE DIGITAL ANALYZER v3.0
+   Audio engine + vizualizace ve stylu Audio Editoru (USS Prometheus)
    ========================================================================== */
 
-// Globální proměnné pro filtry a samostatné analyzéry pro 4 patra
-let anaBass, anaMid, anaVocals, anaHigh;
+const $ = (id) => document.getElementById(id);
+
+const fileInput = $('fileInput');
+const audioElement = $('mainAudio');
+const toggle3DBtn = $('toggle3D');
+const exportBtn = $('exportBtn');
+const exportCsvBtn = $('exportCsvBtn');
+
+/* --------------------------------------------------------------------------
+   KONFIGURACE
+   -------------------------------------------------------------------------- */
+
+// 4 patra osciloskopu (pořadí a barvy podle původního analyzéru)
+const SCOPE_LANES = [
+    { key: 'bass',   label: 'BASY',   color: '#ff4444', gain: 3.0 },
+    { key: 'mid',    label: 'STŘEDY', color: '#00ff88', gain: 2.0 },
+    { key: 'high',   label: 'VÝŠKY',  color: '#4477ff', gain: 4.0 },
+    { key: 'vocals', label: 'VOKÁLY', color: '#ff9900', gain: 2.5 }
+];
+
+// Pásma pro radar
+const RADAR_BANDS = [
+    { label: 'Sub-Bass', f0: 20,    f1: 60 },
+    { label: 'Bass',     f0: 60,    f1: 250 },
+    { label: 'Low-Mid',  f0: 250,   f1: 500 },
+    { label: 'Mid',      f0: 500,   f1: 2000 },
+    { label: 'High-Mid', f0: 2000,  f1: 6000 },
+    { label: 'Treble',   f0: 6000,  f1: 12000 },
+    { label: 'Air',      f0: 12000, f1: 20000 }
+];
+
+// 8 pásem pro export
+const REC_BANDS = [
+    { key: 'subBass',    f0: 20,    f1: 60 },
+    { key: 'bass',       f0: 60,    f1: 250 },
+    { key: 'lowMid',     f0: 250,   f1: 500 },
+    { key: 'mid',        f0: 500,   f1: 2000 },
+    { key: 'highMid',    f0: 2000,  f1: 4000 },
+    { key: 'presence',   f0: 4000,  f1: 6000 },
+    { key: 'brilliance', f0: 6000,  f1: 12000 },
+    { key: 'air',        f0: 12000, f1: 20000 }
+];
+
+const FFT_SIZE = 8192;      // hlavní analyser (4096 binů)
+const TD_SIZE = 2048;       // L/R analysery
+const SCOPE_SIZE = 1024;    // osciloskop pásem
+const VU_FLOOR_DB = -60;
+
+/* --------------------------------------------------------------------------
+   STAV
+   -------------------------------------------------------------------------- */
+
+let audioContext = null, source = null;
+let analyser = null, peakAnalyser = null, analyserLeft = null, analyserRight = null;
+let isContextReady = false;
+
+let specData = new Float32Array(FFT_SIZE / 2).fill(-120);
+let tdL = new Float32Array(TD_SIZE);
+let tdR = new Float32Array(TD_SIZE);
+let tdPeak = new Float32Array(FFT_SIZE);
+
+const scopeAnalysers = {};
+const scopeBuffers = {};
+SCOPE_LANES.forEach((lane) => { scopeBuffers[lane.key] = new Uint8Array(SCOPE_SIZE).fill(128); });
+
+let currentFileName = 'audio';
+let currentUrl = null;
+
+// Export
+let exportData = [];
+let recordingInterval = null;
+
+// Smyčka
+let rafId = null;
+let lastTs = 0;
+let frameCount = 0;
+let lastL = { peak: 0, rms: 0 };
+let lastR = { peak: 0, rms: 0 };
+
+// 3D (zatím skryté, ve vývoji)
+let show3D = false;
+let scene3D = null, camera3D = null, renderer3D = null;
+const bars3D = [];
+
+/* --------------------------------------------------------------------------
+   POMOCNÉ FUNKCE
+   -------------------------------------------------------------------------- */
+
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const toDb = (lin) => (lin > 1e-6 ? 20 * Math.log10(lin) : -Infinity);
+const isLevel = (db) => Number.isFinite(db) && db > -150;
+const fmtDb = (db, digits = 1) => (isLevel(db) ? db.toFixed(digits) : '-∞');
+const setText = (id, text) => { const el = $(id); if (el) el.textContent = text; };
+
+function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
+
+function fmtTime(sec) {
+    if (!Number.isFinite(sec)) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function fmtFreq(hz) {
+    if (!hz) return '--- Hz';
+    return hz >= 1000 ? `${(hz / 1000).toFixed(2)} kHz` : `${Math.round(hz)} Hz`;
+}
+
+function getBinHz() {
+    return (audioContext ? audioContext.sampleRate : 44100) / FFT_SIZE;
+}
+
+// Peak a RMS z časové oblasti (lineární, 0..1)
+function timeStats(buf) {
+    let peak = 0, sum = 0;
+    for (let i = 0; i < buf.length; i++) {
+        const v = buf[i];
+        const a = v < 0 ? -v : v;
+        if (a > peak) peak = a;
+        sum += v * v;
+    }
+    return { peak, rms: Math.sqrt(sum / buf.length) };
+}
+
+// Průměrná energie pásma (výkonově) v dB
+function bandPowerDb(spec, binHz, f0, f1) {
+    const b0 = Math.max(1, Math.floor(f0 / binHz));
+    const b1 = Math.min(spec.length - 1, Math.ceil(f1 / binHz));
+    let sum = 0, count = 0;
+    for (let b = b0; b <= b1; b++) {
+        sum += Math.pow(10, spec[b] / 10);
+        count++;
+    }
+    return count ? 10 * Math.log10(sum / count + 1e-20) : -Infinity;
+}
+
+// Peak frekvence a spektrální centroid z aktuálních dat
+function analyseSpectrum() {
+    const binHz = getBinHz();
+    const start = Math.max(1, Math.floor(20 / binHz));
+    let maxDb = -Infinity, maxBin = 0, sumP = 0, sumFP = 0;
+    for (let b = start; b < specData.length; b++) {
+        const d = specData[b];
+        if (d > maxDb) { maxDb = d; maxBin = b; }
+        const p = Math.pow(10, d / 10);
+        sumP += p;
+        sumFP += p * b * binHz;
+    }
+    return {
+        peakFreq: maxDb > -85 ? maxBin * binHz : null,
+        centroid: sumP > 1e-12 ? sumFP / sumP : null
+    };
+}
+
+/* --------------------------------------------------------------------------
+   WAVESURFER + RADAR
+   -------------------------------------------------------------------------- */
+
+const wavesurfer = WaveSurfer.create({
+    container: '#waveform',
+    waveColor: '#4477ff',
+    progressColor: '#ffcc00',
+    cursorColor: '#ff4444',
+    barWidth: 3,
+    barGap: 2,
+    height: 120,
+    media: audioElement
+});
+
+const radarChart = new Chart($('radarChart').getContext('2d'), {
+    type: 'radar',
+    data: {
+        labels: RADAR_BANDS.map((b) => b.label),
+        datasets: [{
+            label: 'Aktuální Energie',
+            data: RADAR_BANDS.map(() => 0),
+            backgroundColor: 'rgba(255, 204, 0, 0.4)',
+            borderColor: '#ffcc00',
+            borderWidth: 2,
+            pointRadius: 0
+        }]
+    },
+    options: {
+        scales: {
+            r: {
+                min: 0,
+                max: 100,
+                ticks: { display: false },
+                grid: { color: '#333' },
+                angleLines: { color: '#333' },
+                pointLabels: { color: '#aaa' }
+            }
+        },
+        plugins: { legend: { labels: { color: '#aaa' } } },
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false
+    }
+});
+
+function updateRadar() {
+    const binHz = getBinHz();
+    radarChart.data.datasets[0].data = RADAR_BANDS.map((b) =>
+        clamp((bandPowerDb(specData, binHz, b.f0, b.f1) + 90) / 65, 0, 1) * 100
+    );
+    radarChart.update('none');
+}
+
+/* --------------------------------------------------------------------------
+   SPEKTRUM RENDERER (převzato z Audio Editoru)
+   Logaritmické seskupení FFT binů, LCARS barvy podle pásma,
+   peak-hold čárky s gravitačním pádem.
+   -------------------------------------------------------------------------- */
+
+class SpectrumRenderer {
+    constructor(canvas, opts = {}) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.bars = opts.bars || 48;
+        this.fmin = opts.fmin || 30;
+        this.fmax = opts.fmax || 18000;
+        this.labels = opts.labels !== false;
+        this.gap = opts.gap !== undefined ? opts.gap : 2;
+        this.dbMin = -90;
+        this.dbMax = -15;
+        this.levels = new Float32Array(this.bars);
+        this.peaks = new Float32Array(this.bars);
+        this.vel = new Float32Array(this.bars);
+        this.w = 1;
+        this.h = 1;
+        this.resize();
+    }
+
+    resize() {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = this.canvas.getBoundingClientRect();
+        this.w = Math.max(1, Math.round(rect.width));
+        this.h = Math.max(1, Math.round(rect.height));
+        this.canvas.width = Math.round(this.w * dpr);
+        this.canvas.height = Math.round(this.h * dpr);
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    clear() {
+        this.ctx.clearRect(0, 0, this.w, this.h);
+    }
+
+    reset() {
+        this.levels.fill(0);
+        this.peaks.fill(0);
+        this.vel.fill(0);
+    }
+
+    update(spec, binHz, dt) {
+        const n = this.bars;
+        const ratio = Math.pow(this.fmax / this.fmin, 1 / n);
+        const k = dt * 60;
+        for (let i = 0; i < n; i++) {
+            const f0 = this.fmin * Math.pow(ratio, i);
+            const f1 = f0 * ratio;
+            const b0 = Math.min(spec.length - 1, Math.floor(f0 / binHz));
+            const b1 = Math.min(spec.length - 1, Math.max(b0 + 1, Math.ceil(f1 / binHz)));
+            let maxDb = -120;
+            for (let b = b0; b <= b1; b++) {
+                if (spec[b] > maxDb) maxDb = spec[b];
+            }
+            const target = clamp((maxDb - this.dbMin) / (this.dbMax - this.dbMin), 0, 1);
+            const prev = this.levels[i];
+            const lvl = target > prev ? target : prev * 0.82 + target * 0.18;
+            this.levels[i] = lvl;
+
+            // Peak-hold s gravitačním pádem
+            if (lvl >= this.peaks[i]) {
+                this.peaks[i] = lvl;
+                this.vel[i] = 0;
+            } else {
+                this.vel[i] += 0.001 * k;
+                this.peaks[i] = Math.max(0, this.peaks[i] - this.vel[i] * k);
+            }
+        }
+    }
+
+    drawBars(x, y, w, h) {
+        const ctx = this.ctx;
+        const labelH = this.labels ? 16 : 0;
+        const plotH = Math.max(10, h - labelH);
+        const maxBar = plotH * 0.95;
+        const baseY = y + plotH;
+        const n = this.bars;
+        const bw = Math.max(1, (w - this.gap * (n - 1)) / n);
+
+        ctx.save();
+        ctx.font = '10px "JetBrains Mono", Consolas, monospace';
+
+        // mřížka + dB popisky
+        if (this.labels) {
+            ctx.lineWidth = 1;
+            for (const frac of [0.25, 0.5, 0.75]) {
+                const gy = Math.round(baseY - frac * maxBar) + 0.5;
+                ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+                ctx.beginPath();
+                ctx.moveTo(x, gy);
+                ctx.lineTo(x + w, gy);
+                ctx.stroke();
+                ctx.fillStyle = '#555';
+                ctx.textAlign = 'left';
+                ctx.fillText(`${Math.round(this.dbMin + frac * (this.dbMax - this.dbMin))} dB`, x + 3, gy - 3);
+            }
+        }
+
+        // 4 gradienty podle pásma (fialová → modrá → zlatá → oranžová, špička do červena)
+        const bandLo = ['#5B4A73', '#2F5978', '#8A6F1E', '#8A4E10'];
+        const bandHi = ['#C297D8', '#6FA8DC', '#FFD34D', '#FF9F1C'];
+        const grads = bandLo.map((lo, idx) => {
+            const g = ctx.createLinearGradient(0, baseY, 0, baseY - maxBar);
+            g.addColorStop(0, lo);
+            g.addColorStop(0.55, bandHi[idx]);
+            g.addColorStop(0.9, bandHi[idx]);
+            g.addColorStop(1, '#ff4757');
+            return g;
+        });
+
+        for (let i = 0; i < n; i++) {
+            const t = i / n;
+            const band = t < 0.25 ? 0 : t < 0.55 ? 1 : t < 0.8 ? 2 : 3;
+            const bh = this.levels[i] * maxBar;
+            const bx = x + i * (bw + this.gap);
+            ctx.fillStyle = grads[band];
+            ctx.fillRect(bx, baseY - bh, bw, bh);
+
+            const ph = this.peaks[i] * maxBar;
+            if (ph > 1) {
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(bx, baseY - ph - 2, bw, 2);
+            }
+        }
+
+        // popisky frekvencí
+        if (this.labels) {
+            ctx.fillStyle = '#777';
+            ctx.textAlign = 'center';
+            const span = Math.log(this.fmax / this.fmin);
+            for (const f of [50, 100, 200, 500, 1000, 2000, 5000, 10000]) {
+                if (f < this.fmin || f > this.fmax) continue;
+                const px = x + (Math.log(f / this.fmin) / span) * w;
+                ctx.fillText(f >= 1000 ? `${f / 1000}k` : `${f}`, px, y + h - 3);
+            }
+        }
+        ctx.restore();
+    }
+}
+
+const mainSpec = new SpectrumRenderer($('spectrumCanvas'), { bars: 48, fmin: 30, fmax: 18000, labels: true, gap: 2 });
+const miniSpec = new SpectrumRenderer($('miniSpectrumCanvas'), { bars: 32, fmin: 30, fmax: 16000, labels: false, gap: 1 });
+
+function drawMainCanvas() {
+    const s = mainSpec;
+    const ctx = s.ctx;
+    const w = s.w, h = s.h;
+    s.clear();
+
+    const specH = Math.round(h * 0.5);
+    s.drawBars(0, 0, w, specH);
+
+    // oddělovač
+    ctx.save();
+    ctx.strokeStyle = '#26282e';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, specH + 4.5);
+    ctx.lineTo(w, specH + 4.5);
+    ctx.stroke();
+    ctx.restore();
+
+    // osciloskop - 4 patra se svitem
+    const top = specH + 8;
+    const laneH = (h - top - 2) / SCOPE_LANES.length;
+    SCOPE_LANES.forEach((lane, i) => {
+        const cy = top + laneH * (i + 0.5);
+        const half = Math.max(2, laneH / 2 - 2);
+        const buf = scopeBuffers[lane.key];
+        const step = w / (buf.length - 1);
+
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, cy);
+        ctx.lineTo(w, cy);
+        ctx.stroke();
+
+        ctx.shadowColor = lane.color;
+        ctx.shadowBlur = 6;
+        ctx.strokeStyle = lane.color;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        for (let j = 0; j < buf.length; j++) {
+            const v = clamp(((buf[j] - 128) / 128) * lane.gain, -1, 1);
+            const px = j * step;
+            const py = cy - v * half;
+            if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.save();
+        ctx.fillStyle = lane.color;
+        ctx.font = '600 11px "JetBrains Mono", Consolas, monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(lane.label, 6, top + laneH * i + 12);
+        ctx.restore();
+    });
+}
+
+function drawAll() {
+    drawMainCanvas();
+    miniSpec.clear();
+    miniSpec.drawBars(0, 0, miniSpec.w, miniSpec.h);
+}
+
+/* --------------------------------------------------------------------------
+   VU METRY (RMS z časové oblasti + peak-hold značka)
+   -------------------------------------------------------------------------- */
+
+const VU = {
+    L: { barId: 'vuLeft',  textId: 'vuLeftText',  boxId: 'vuLeftContainer',  shown: VU_FLOOR_DB, peak: VU_FLOOR_DB, hold: 0, marker: null },
+    R: { barId: 'vuRight', textId: 'vuRightText', boxId: 'vuRightContainer', shown: VU_FLOOR_DB, peak: VU_FLOOR_DB, hold: 0, marker: null }
+};
+
+Object.values(VU).forEach((v) => {
+    const box = $(v.boxId);
+    if (box) {
+        v.marker = document.createElement('div');
+        v.marker.className = 'vu-peak';
+        box.appendChild(v.marker);
+    }
+});
+
+function paintVU(v) {
+    const pct = clamp((v.shown - VU_FLOOR_DB) / -VU_FLOOR_DB, 0, 1) * 100;
+    const bar = $(v.barId);
+    if (bar) {
+        bar.style.height = pct + '%';
+        bar.style.background = v.shown > -6 ? '#ff0000'
+            : v.shown > -12 ? '#ff9900'
+            : v.shown > -20 ? '#ffff00'
+            : '#00ff00';
+    }
+    setText(v.textId, v.shown <= VU_FLOOR_DB + 0.05 ? '-∞ dB' : v.shown.toFixed(1) + ' dB');
+    if (v.marker) {
+        if (v.peak <= VU_FLOOR_DB + 0.5) {
+            v.marker.style.display = 'none';
+        } else {
+            v.marker.style.display = 'block';
+            v.marker.style.bottom = clamp((v.peak - VU_FLOOR_DB) / -VU_FLOOR_DB, 0, 1) * 100 + '%';
+        }
+    }
+}
+
+function updateVU(v, rmsDb, peakDb, dt) {
+    const target = isLevel(rmsDb) ? Math.max(VU_FLOOR_DB, rmsDb) : VU_FLOOR_DB;
+    v.shown = target > v.shown ? target : Math.max(target, v.shown - 40 * dt);
+
+    const pk = isLevel(peakDb) ? Math.max(VU_FLOOR_DB, peakDb) : VU_FLOOR_DB;
+    if (pk >= v.peak) {
+        v.peak = pk;
+        v.hold = 1.0;
+    } else if (v.hold > 0) {
+        v.hold -= dt;
+    } else {
+        v.peak = Math.max(pk, v.peak - 20 * dt);
+    }
+    paintVU(v);
+}
+
+function resetVU() {
+    Object.values(VU).forEach((v) => {
+        v.shown = VU_FLOOR_DB;
+        v.peak = VU_FLOOR_DB;
+        v.hold = 0;
+        paintVU(v);
+    });
+}
+
+/* --------------------------------------------------------------------------
+   INFO PANEL
+   -------------------------------------------------------------------------- */
+
+function updateInfoPanel() {
+    const rmsLin = Math.sqrt((lastL.rms * lastL.rms + lastR.rms * lastR.rms) / 2);
+    const peakLin = Math.max(lastL.peak, lastR.peak);
+    const sp = analyseSpectrum();
+
+    setText('peakFreq', fmtFreq(sp.peakFreq));
+    setText('centroid', fmtFreq(sp.centroid));
+    setText('curTime', fmtTime(audioElement.currentTime));
+    setText('rmsLevel', fmtDb(toDb(rmsLin)) + ' dBFS');
+    setText('peakLevel', fmtDb(toDb(peakLin)) + ' dBFS');
+
+    if (lastL.rms > 1e-6 && lastR.rms > 1e-6) {
+        const bal = 20 * Math.log10(lastL.rms / lastR.rms);
+        setText('balance', Math.abs(bal) < 0.3 ? '0.0 dB (střed)' : `${bal > 0 ? 'L' : 'R'} ${Math.abs(bal).toFixed(1)} dB`);
+    } else {
+        setText('balance', '---');
+    }
+}
+
+function resetInfoPanel() {
+    setText('peakFreq', '--- Hz');
+    setText('centroid', '--- Hz');
+    setText('curTime', fmtTime(audioElement.currentTime || 0));
+    setText('rmsLevel', '-∞ dBFS');
+    setText('peakLevel', '-∞ dBFS');
+    setText('balance', '---');
+}
+
+/* --------------------------------------------------------------------------
+   AUDIO ENGINE
+   -------------------------------------------------------------------------- */
 
 function setupAudioChain() {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    
-    // Hlavní analyser pro spektrum - ZVÝŠENÁ PŘESNOST
+
+    // Hlavní analyser - spektrum v dB
     analyser = audioContext.createAnalyser();
-    analyser.fftSize = 2048; 
-    analyser.smoothingTimeConstant = 0.3;
-    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    analyser.fftSize = FFT_SIZE;
+    analyser.smoothingTimeConstant = 0.7;
+    analyser.minDecibels = -100;
+    analyser.maxDecibels = -10;
+    specData = new Float32Array(analyser.frequencyBinCount);
 
-    // Peak analyser pro TRUE PEAK detection
+    // Peak analyser - skutečné vzorky pro true peak
     peakAnalyser = audioContext.createAnalyser();
-    peakAnalyser.fftSize = 8192; 
+    peakAnalyser.fftSize = FFT_SIZE;
     peakAnalyser.smoothingTimeConstant = 0;
-    peakDataArray = new Uint8Array(peakAnalyser.frequencyBinCount);
+    tdPeak = new Float32Array(peakAnalyser.fftSize);
 
-    // Stereo routing pro VU Metry
-    splitter = audioContext.createChannelSplitter(2);
-    
-    // Levy kanal analyser
+    // L/R analysery
     analyserLeft = audioContext.createAnalyser();
-    analyserLeft.fftSize = 2048;
-    analyserLeft.smoothingTimeConstant = 0.3;
-    dataArrayLeft = new Uint8Array(analyserLeft.frequencyBinCount);
-    
-    // Pravy kanal analyser
+    analyserLeft.fftSize = TD_SIZE;
     analyserRight = audioContext.createAnalyser();
-    analyserRight.fftSize = 2048;
-    analyserRight.smoothingTimeConstant = 0.3;
-    dataArrayRight = new Uint8Array(analyserRight.frequencyBinCount);
+    analyserRight.fftSize = TD_SIZE;
+    tdL = new Float32Array(TD_SIZE);
+    tdR = new Float32Array(TD_SIZE);
 
     source = audioContext.createMediaElementSource(audioElement);
-    
-    // --- JIŘÍKOVA NOVINKA: FILTRAČNÍ KASKÁDA PRO 4 PATRA OSCILOSKOPU ---
-    const createBranch = (type, freq, Q = 1) => {
+
+    // Filtrační kaskáda pro 4 patra osciloskopu
+    const createBranch = (key, type, freq, Q = 1) => {
         const filter = audioContext.createBiquadFilter();
         filter.type = type;
         filter.frequency.value = freq;
         filter.Q.value = Q;
         const ana = audioContext.createAnalyser();
-        ana.fftSize = 1024;
+        ana.fftSize = SCOPE_SIZE;
         source.connect(filter);
         filter.connect(ana);
-        return ana;
+        scopeAnalysers[key] = ana;
     };
+    createBranch('bass',   'lowpass',  150);
+    createBranch('mid',    'bandpass', 500);
+    createBranch('vocals', 'bandpass', 1500, 2);
+    createBranch('high',   'highpass', 5000);
 
-    anaBass = createBranch('lowpass', 150);     // Červená: Basy
-    anaMid = createBranch('bandpass', 500);     // Zelená: Středy
-    anaVocals = createBranch('bandpass', 1500, 2); // Oranžová: Vokály
-    anaHigh = createBranch('highpass', 5000);   // Modrá: Výšky
-
-    // Routing: source -> analysers (Zachování původní funkčnosti)
+    // Přehrávání + analýza
     source.connect(analyser);
-    source.connect(peakAnalyser);
     analyser.connect(audioContext.destination);
-    
-    // Routing: source -> splitter -> L/R analysers
-    source.connect(splitter);
+    source.connect(peakAnalyser);
+
+    // Stereo: mono zdroj se upmixuje na L=R, ať pravý VU metr nezůstane prázdný
+    const stereoUp = audioContext.createGain();
+    stereoUp.channelCount = 2;
+    stereoUp.channelCountMode = 'explicit';
+    stereoUp.channelInterpretation = 'speakers';
+    const splitter = audioContext.createChannelSplitter(2);
+    source.connect(stereoUp);
+    stereoUp.connect(splitter);
     splitter.connect(analyserLeft, 0);
     splitter.connect(analyserRight, 1);
+
+    setText('sampleRate', audioContext.sampleRate + ' Hz');
 }
 
-function setupToneJS() {
-    Tone.setContext(audioContext);
-    reverb = new Tone.Reverb({ decay: 3, wet: 0 }).toDestination();
-    
-    reverbSlider.addEventListener('input', (e) => {
-        reverb.wet.value = e.target.value / 100;
-    });
-}
+/* --------------------------------------------------------------------------
+   3D (ve vývoji - tlačítko je skryté)
+   -------------------------------------------------------------------------- */
 
 function setup3D() {
-    const container = document.getElementById('threeContainer');
-    scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    renderer.setClearColor(0x000000, 0);
-    container.appendChild(renderer.domElement);
+    const container = $('threeContainer');
+    if (typeof THREE === 'undefined' || !container || !container.clientWidth || !container.clientHeight) return false;
 
-    camera.position.z = 50;
+    scene3D = new THREE.Scene();
+    camera3D = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+    renderer3D = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer3D.setSize(container.clientWidth, container.clientHeight);
+    renderer3D.setClearColor(0x000000, 0);
+    container.appendChild(renderer3D.domElement);
+    camera3D.position.z = 50;
 
-    // Create 32 bars in circle
     for (let i = 0; i < 32; i++) {
-        const geometry = new THREE.BoxGeometry(1, 1, 1);
-        const material = new THREE.MeshBasicMaterial({ color: 0xffcc00 });
-        const bar = new THREE.Mesh(geometry, material);
+        const bar = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 1, 1),
+            new THREE.MeshBasicMaterial({ color: 0xffcc00 })
+        );
         const angle = (i / 32) * Math.PI * 2;
         bar.position.x = Math.cos(angle) * 15;
         bar.position.z = Math.sin(angle) * 15;
-        scene.add(bar);
+        scene3D.add(bar);
         bars3D.push(bar);
     }
+    return true;
 }
 
-// Toggle 3D
 toggle3DBtn.addEventListener('click', () => {
+    if (!show3D && !renderer3D && !setup3D()) return;
     show3D = !show3D;
     toggle3DBtn.textContent = `3D View: ${show3D ? 'ON' : 'OFF'}`;
     toggle3DBtn.classList.toggle('active');
 });
 
-// Toggle Effect
-toggleEffectBtn.addEventListener('click', () => {
-    effectActive = !effectActive;
-    toggleEffectBtn.textContent = `Effect: ${effectActive ? 'ON' : 'OFF'}`;
-    toggleEffectBtn.classList.toggle('active');
-    
-    if (effectActive && reverb) {
-        source.disconnect();
-        source.connect(analyser);
-        const toneNode = audioContext.createMediaStreamDestination();
-        source.connect(toneNode);
-        reverb.connect(audioContext.destination);
-    } else if (reverb) {
-        reverb.wet.value = 0;
+function render3D() {
+    if (!show3D || !renderer3D) return;
+    for (let i = 0; i < bars3D.length; i++) {
+        const bin = Math.round(Math.pow(i / bars3D.length, 2) * 255) + 1;
+        const v = clamp((specData[bin] + 100) / 85, 0, 1);
+        bars3D[i].scale.y = 1 + v * 30;
+        bars3D[i].material.color.setHSL(v * 0.6, 1, 0.5);
+    }
+    scene3D.rotation.y += 0.005;
+    renderer3D.render(scene3D, camera3D);
+}
+
+/* --------------------------------------------------------------------------
+   RENDER SMYČKA
+   -------------------------------------------------------------------------- */
+
+function renderFrame(dt) {
+    frameCount++;
+
+    analyser.getFloatFrequencyData(specData);
+    analyserLeft.getFloatTimeDomainData(tdL);
+    analyserRight.getFloatTimeDomainData(tdR);
+
+    lastL = timeStats(tdL);
+    lastR = timeStats(tdR);
+    updateVU(VU.L, toDb(lastL.rms), toDb(lastL.peak), dt);
+    updateVU(VU.R, toDb(lastR.rms), toDb(lastR.peak), dt);
+
+    const binHz = getBinHz();
+    mainSpec.update(specData, binHz, dt);
+    miniSpec.update(specData, binHz, dt);
+
+    SCOPE_LANES.forEach((lane) => {
+        const ana = scopeAnalysers[lane.key];
+        if (ana) ana.getByteTimeDomainData(scopeBuffers[lane.key]);
+    });
+
+    drawAll();
+
+    if (frameCount % 3 === 0) updateRadar();
+    if (frameCount % 6 === 0) updateInfoPanel();
+    render3D();
+}
+
+function tick(ts) {
+    rafId = null;
+    if (audioElement.paused) return;
+    const dt = Math.min(0.1, Math.max(0.001, (ts - lastTs) / 1000));
+    lastTs = ts;
+    renderFrame(dt);
+    rafId = requestAnimationFrame(tick);
+}
+
+function startLoop() {
+    if (rafId) return;
+    lastTs = performance.now();
+    rafId = requestAnimationFrame(tick);
+}
+
+function resetVisuals() {
+    resetVU();
+    mainSpec.reset();
+    miniSpec.reset();
+    SCOPE_LANES.forEach((lane) => scopeBuffers[lane.key].fill(128));
+    radarChart.data.datasets[0].data = RADAR_BANDS.map(() => 0);
+    radarChart.update('none');
+    resetInfoPanel();
+    drawAll();
+}
+
+/* --------------------------------------------------------------------------
+   ZÁZNAM DAT PRO EXPORT (přesný interval 100 ms)
+   -------------------------------------------------------------------------- */
+
+function recordSnapshot(time) {
+    if (!analyser) return;
+
+    analyser.getFloatFrequencyData(specData);
+    peakAnalyser.getFloatTimeDomainData(tdPeak);
+    analyserLeft.getFloatTimeDomainData(tdL);
+    analyserRight.getFloatTimeDomainData(tdR);
+
+    const binHz = getBinHz();
+    const bands = {};
+    REC_BANDS.forEach((b) => { bands[b.key] = bandPowerDb(specData, binHz, b.f0, b.f1); });
+
+    const pk = timeStats(tdPeak);
+    const l = timeStats(tdL);
+    const r = timeStats(tdR);
+
+    const rmsLin = Math.sqrt((l.rms * l.rms + r.rms * r.rms) / 2);
+    const peakLin = Math.max(pk.peak, l.peak, r.peak);
+
+    exportData.push({
+        t: time,
+        bands,
+        rms: toDb(rmsLin),
+        peak: toDb(peakLin),
+        crest: rmsLin > 1e-6 ? peakLin / rmsLin : 0,
+        peakFreq: analyseSpectrum().peakFreq,
+        balance: (l.rms > 1e-6 && r.rms > 1e-6) ? 20 * Math.log10(l.rms / r.rms) : 0
+    });
+}
+
+function startRecording() {
+    stopRecording();
+    recordingInterval = setInterval(() => {
+        if (!audioElement.paused) recordSnapshot(audioElement.currentTime);
+    }, 100);
+}
+
+function stopRecording() {
+    if (recordingInterval) {
+        clearInterval(recordingInterval);
+        recordingInterval = null;
+    }
+}
+
+/* --------------------------------------------------------------------------
+   UDÁLOSTI PŘEHRÁVAČE
+   -------------------------------------------------------------------------- */
+
+fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    stopRecording();
+    exportData = [];
+    currentFileName = file.name;
+
+    if (currentUrl) URL.revokeObjectURL(currentUrl);
+    currentUrl = URL.createObjectURL(file);
+    audioElement.src = currentUrl;
+    resetVisuals();
+
+    try {
+        Promise.resolve(wavesurfer.load(currentUrl)).catch((err) => console.warn('Waveform:', err));
+    } catch (err) {
+        console.warn('Waveform:', err);
     }
 });
 
-let frameCount = 0;
-function renderLoop() {
-    if (!audioElement.paused) {
-        requestAnimationFrame(renderLoop);
-        
-        // 1. Získání dat pro všechny kanály
-        analyser.getByteFrequencyData(dataArray);
-        analyserLeft.getByteFrequencyData(dataArrayLeft);
-        analyserRight.getByteFrequencyData(dataArrayRight);
-        
-        frameCount++;
-        
-        // 2. D3 Bars (Celkové spektrum)
-        const d3Container = document.getElementById('d3_viz');
-        d3Container.innerHTML = '';
-        for (let i = 0; i < 32; i++) {
-            const val = dataArray[i];
-            const bar = document.createElement('div');
-            bar.className = 'bar';
-            bar.style.height = (val / 2.55) + '%';
-            bar.style.backgroundColor = `hsl(${val}, 100%, 50%)`;
-            d3Container.appendChild(bar);
-        }
+audioElement.addEventListener('loadedmetadata', () => {
+    setText('duration', fmtTime(audioElement.duration));
+    if (audioContext) setText('sampleRate', audioContext.sampleRate + ' Hz');
+});
 
-        // 3. VU METRY - NYNÍ SYNCHRONNÍ A PŘESNÉ
-        // Počítáme průměrnou energii z celého spektra pro každý kanál zvlášť
-        const leftLevel = dataArrayLeft.reduce((a, b) => a + b, 0) / dataArrayLeft.length;
-        const rightLevel = dataArrayRight.reduce((a, b) => a + b, 0) / dataArrayRight.length;
-        
-        // Zesílení pro vizualizaci (aby to pořádně skákalo)
-        const vuGain = 1.2; 
-        updateVUMeter('vuLeft', 'vuLeftText', Math.min(255, leftLevel * vuGain));
-        updateVUMeter('vuRight', 'vuRightText', Math.min(255, rightLevel * vuGain));
-
-        // 4. Radar Chart
-        const bands = [
-            dataArray[1], dataArray[3], dataArray[8], dataArray[16],
-            dataArray[24], dataArray[32], dataArray[48] || 0
-        ];
-        radarChart.data.datasets[0].data = bands;
-        radarChart.update();
-
-        // 5. 3D Vizualizace a Osciloskop (ty už máš v pořádku)
-        if (show3D && bars3D.length > 0) {
-            for (let i = 0; i < 32; i++) {
-                const val = dataArray[i] / 1; 
-                bars3D[i].scale.y = val || 1;
-                bars3D[i].material.color.setHSL((dataArray[i] / 255) * 0.6, 1, 0.5);
-            }
-            scene.rotation.y += 0.005;
-            renderer.render(scene, camera);
-        }
-
-        if (frameCount % 2 === 0) {
-            updateSpectrogram();
-        }
-    }
-}
-
-function updateSpectrogram() {
-    if (!anaBass) return;
-
-    const getWave = (targetAnalyser) => {
-        const data = new Uint8Array(targetAnalyser.fftSize);
-        targetAnalyser.getByteTimeDomainData(data);
-        return Array.from(data);
-    };
-
-    const createLine = (yOffset, color, waveData, gain = 1.0) => {
-        return {
-            x: Array.from({length: waveData.length}, (_, i) => i),
-            y: waveData.map(v => ((v - 128) * gain) + yOffset),
-            type: 'scatter',
-            mode: 'lines',
-            line: { color: color, width: 2, shape: 'spline' }
-        };
-    };
-
-    const traceBass = createLine(180, '#ff4444', getWave(anaBass), 2.5);
-    const traceMids = createLine(120, '#00ff88', getWave(anaMid), 1.5);
-    const traceHigh = createLine(60, '#4477ff', getWave(anaHigh), 2.8);
-    const traceVocals = createLine(20, '#ff9900', getWave(anaVocals), 2.0);
-
-    const layout = {
-        paper_bgcolor: 'rgba(0,0,0,0)',
-        plot_bgcolor: 'rgba(0,0,0,0)',
-        showlegend: false,
-        // AUTOMATICKÉ ROZTAŽENÍ OSY X
-        autosize: true, 
-        xaxis: { 
-            visible: false, 
-            autorange: true // Zajistí, že vlnovky vyplní celou šířku grafu
-        },
-        yaxis: { range: [-40, 280], visible: false },
-        margin: { t: 0, b: 0, l: 0, r: 120 }, // Minimalizované okraje pro maximální šířku
-        annotations: [
-            { x: 1.02, xref: 'paper', y: 180, yref: 'y', text: '🔴 <b>BASY</b>', showarrow: false, xanchor: 'left', font: {color: '#ff4444', size: 14} },
-            { x: 1.02, xref: 'paper', y: 120, yref: 'y', text: '🟢 <b>STŘEDY</b>', showarrow: false, xanchor: 'left', font: {color: '#00ff88', size: 14} },
-            { x: 1.02, xref: 'paper', y: 60, yref: 'y', text: '🔵 <b>VÝŠKY</b>', showarrow: false, xanchor: 'left', font: {color: '#4477ff', size: 14} },
-            { x: 1.02, xref: 'paper', y: 20, yref: 'y', text: '🟠 <b>VOKÁLY</b>', showarrow: false, xanchor: 'left', font: {color: '#ff9900', size: 14} }
-        ]
-    };
-
-    // Konfigurace pro responzivitu
-    const config = { responsive: true, displayModeBar: false };
-
-    Plotly.react('spectrogramPlot', [traceBass, traceMids, traceHigh, traceVocals], layout, config);
-}
-
-function updateVUMeter(barId, textId, level) {
-    const bar = document.getElementById(barId);
-    const text = document.getElementById(textId);
-    const percentage = (level / 255) * 100;
-    bar.style.height = percentage + '%';
-    
-    if (percentage < 60) bar.style.background = '#00ff00';
-    else if (percentage < 80) bar.style.background = '#ffff00';
-    else if (percentage < 95) bar.style.background = '#ff9900';
-    else bar.style.background = '#ff0000';
-    
-    const dbValue = 20 * Math.log10(level / 255);
-    text.textContent = dbValue.toFixed(1) + ' dB';
-}
-
-    // Zaznamenat snapshot frekvenčních pásem - MAXIMÁLNÍ PŘESNOST
-    function recordDataSnapshot(time) {
-        // Aktuální data z analyserů
-        analyser.getByteFrequencyData(dataArray);
-        peakAnalyser.getByteFrequencyData(peakDataArray);
-        analyserLeft.getByteFrequencyData(dataArrayLeft);
-        analyserRight.getByteFrequencyData(dataArrayRight);
-        
-        // Frekvence pro každé pásmo (s FFT 2048 máme 1024 binů)
-        const binWidth = audioContext.sampleRate / analyser.fftSize;
-        
-        // Přesné mapování pásem na frekvenční bins
-        const getBandAverage = (startFreq, endFreq) => {
-            const startBin = Math.floor(startFreq / binWidth);
-            const endBin = Math.ceil(endFreq / binWidth);
-            let sum = 0;
-            let count = 0;
-            for (let i = startBin; i <= endBin && i < dataArray.length; i++) {
-                sum += dataArray[i];
-                count++;
-            }
-            return count > 0 ? sum / count : 0;
-        };
-        
-        // 8 pásem podle profesionálních standardů
-        const bands = {
-            subBass: getBandAverage(20, 60),      // Sub-Bass
-            bass: getBandAverage(60, 250),        // Bass
-            lowMid: getBandAverage(250, 500),     // Low-Mid
-            mid: getBandAverage(500, 2000),       // Mid
-            highMid: getBandAverage(2000, 4000),  // High-Mid
-            presence: getBandAverage(4000, 6000), // Presence
-            brilliance: getBandAverage(6000, 12000), // Brilliance
-            air: getBandAverage(12000, 20000)     // Air
-        };
-        
-        // RMS pro každé pásmo (skutečná hlasitost)
-        const calculateRMS = (values) => {
-            const sumSq = values.reduce((sum, val) => sum + val * val, 0);
-            return Math.sqrt(sumSq / values.length);
-        };
-        
-        const overallRMS = calculateRMS(Array.from(dataArray));
-        
-        // TRUE PEAK detection
-        const truePeak = Math.max(...peakDataArray);
-        
-        // Crest Factor (peak-to-RMS ratio) - indikátor kvality mixu
-        const crestFactor = truePeak / (overallRMS || 1);
-        
-        // Dynamic Range
-        const minLevel = Math.min(...dataArray.filter(v => v > 0)) || 1;
-        const maxLevel = truePeak;
-        const dynamicRange = 20 * Math.log10(maxLevel / minLevel);
-        
-        // Stereo info
-        const leftRMS = calculateRMS(Array.from(dataArrayLeft));
-        const rightRMS = calculateRMS(Array.from(dataArrayRight));
-        const stereoBalance = leftRMS / (rightRMS || 1);
-        
-        // Převod na dBFS (decibels Full Scale) - profesionální standard
-        const toDBFS = (value) => {
-            if (value <= 0) return -Infinity;
-            return 20 * Math.log10(value / 255);
-        };
-        
-        const dataPoint = {
-            time: time.toFixed(2),
-            subBass: toDBFS(bands.subBass).toFixed(2),
-            bass: toDBFS(bands.bass).toFixed(2),
-            lowMid: toDBFS(bands.lowMid).toFixed(2),
-            mid: toDBFS(bands.mid).toFixed(2),
-            highMid: toDBFS(bands.highMid).toFixed(2),
-            presence: toDBFS(bands.presence).toFixed(2),
-            brilliance: toDBFS(bands.brilliance).toFixed(2),
-            air: toDBFS(bands.air).toFixed(2),
-            rms: toDBFS(overallRMS).toFixed(2),
-            truePeak: toDBFS(truePeak).toFixed(2),
-            crestFactor: crestFactor.toFixed(2),
-            dynamicRange: (dynamicRange > 0 && dynamicRange < 200 ? dynamicRange.toFixed(1) : 'N/A'),
-            stereoBalance: stereoBalance.toFixed(2)
-        };
-        
-        exportData.push(dataPoint);
-    }
-
-    // Export do HTML
-    exportBtn.addEventListener('click', () => {
-        if (exportData.length === 0) {
-            alert('Nejdřív přehraj audio soubor pro záznam dat!');
+audioElement.addEventListener('play', async () => {
+    if (!isContextReady) {
+        try {
+            setupAudioChain();
+            isContextReady = true;
+        } catch (err) {
+            console.error('Chyba audio řetězce:', err);
+            alert('Nepodařilo se spustit audio engine: ' + err.message);
             return;
         }
-        
-        const fileName = fileInput.files[0]?.name || 'audio';
-        const html = generateExportHTML(fileName);
-        
-        const blob = new Blob([html], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${fileName}_analysis.html`;
-        a.click();
-        URL.revokeObjectURL(url);
-    });
+    }
+    if (audioContext.state === 'suspended') await audioContext.resume();
 
-    function generateExportHTML(fileName) {
-        // Vypočítat celkové statistiky
-        const allRMS = exportData.map(d => parseFloat(d.rms)).filter(v => v > -Infinity);
-        const allPeaks = exportData.map(d => parseFloat(d.truePeak)).filter(v => v > -Infinity);
-        const avgRMS = (allRMS.reduce((a, b) => a + b, 0) / allRMS.length).toFixed(2);
-        const maxPeak = Math.max(...allPeaks).toFixed(2);
-        const avgCrest = (exportData.map(d => parseFloat(d.crestFactor)).reduce((a, b) => a + b, 0) / exportData.length).toFixed(2);
-        
-        let rows = '';
-        exportData.forEach(data => {
-            const getColor = (val) => {
-                const num = parseFloat(val);
-                if (num === -Infinity || isNaN(num)) return 'color: #333;';
-                if (num > -6) return 'color: #ff0000; font-weight: bold;'; // KRITICKÉ!
-                if (num > -12) return 'color: #ff4444;'; // Červená
-                if (num > -18) return 'color: #ff9900;'; // Oranžová
-                if (num > -30) return 'color: #ffcc00;'; // Žlutá
-                return 'color: #00ff00;'; // Zelená
-            };
-            
-            rows += `
+    // Navazujeme na dosavadní záznam; po přetočení zpět se přepíše jen novější část
+    exportData = exportData.filter((d) => d.t < audioElement.currentTime - 0.05);
+    startRecording();
+    startLoop();
+});
+
+audioElement.addEventListener('pause', stopRecording);
+
+audioElement.addEventListener('ended', () => {
+    stopRecording();
+    resetVisuals();
+});
+
+audioElement.addEventListener('seeked', () => {
+    exportData = exportData.filter((d) => d.t < audioElement.currentTime);
+    setText('curTime', fmtTime(audioElement.currentTime));
+});
+
+/* --------------------------------------------------------------------------
+   RESPONZIVITA CANVASU
+   -------------------------------------------------------------------------- */
+
+function onCanvasResize() {
+    mainSpec.resize();
+    miniSpec.resize();
+    drawAll();
+}
+
+if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(onCanvasResize);
+    ro.observe($('spectrogramPlot'));
+    ro.observe($('d3_viz'));
+} else {
+    window.addEventListener('resize', onCanvasResize);
+}
+
+/* --------------------------------------------------------------------------
+   EXPORT (HTML report + CSV)
+   -------------------------------------------------------------------------- */
+
+function baseFileName() {
+    return currentFileName.replace(/\.[^.]+$/, '') || 'audio';
+}
+
+function downloadBlob(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+exportBtn.addEventListener('click', () => {
+    if (exportData.length === 0) {
+        alert('Nejdřív přehraj audio soubor pro záznam dat!');
+        return;
+    }
+    const html = generateExportHTML(currentFileName);
+    downloadBlob(new Blob([html], { type: 'text/html' }), `${baseFileName()}_analysis.html`);
+});
+
+exportCsvBtn.addEventListener('click', () => {
+    if (exportData.length === 0) {
+        alert('Nejdřív přehraj audio soubor pro záznam dat!');
+        return;
+    }
+    const num = (v, d = 2) => (isLevel(v) ? v.toFixed(d) : '');
+    const head = ['time_s', ...REC_BANDS.map((b) => b.key + '_dB'), 'rms_dBFS', 'peak_dBFS', 'crest_factor', 'peak_freq_Hz', 'stereo_balance_dB'];
+    const rows = exportData.map((d) => [
+        d.t.toFixed(2),
+        ...REC_BANDS.map((b) => num(d.bands[b.key])),
+        num(d.rms),
+        num(d.peak),
+        d.crest.toFixed(2),
+        d.peakFreq ? Math.round(d.peakFreq) : '',
+        d.balance.toFixed(2)
+    ].join(','));
+    const csv = '﻿' + [head.join(','), ...rows].join('\n');
+    downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${baseFileName()}_analysis.csv`);
+});
+
+function generateExportHTML(fileName) {
+    const rmsVals = exportData.map((d) => d.rms).filter(isLevel);
+    const peakVals = exportData.map((d) => d.peak).filter(isLevel);
+    const crestVals = exportData.map((d) => d.crest).filter((v) => v > 0);
+
+    const avgRms = rmsVals.length
+        ? 10 * Math.log10(rmsVals.reduce((a, v) => a + Math.pow(10, v / 10), 0) / rmsVals.length)
+        : -Infinity;
+    const maxPeak = peakVals.reduce((a, v) => Math.max(a, v), -Infinity);
+    const avgCrest = crestVals.length ? crestVals.reduce((a, v) => a + v, 0) / crestVals.length : 0;
+
+    // Dynamický rozsah hlasitosti: P95 - P10 z RMS v čase
+    let dynRange = null;
+    if (rmsVals.length >= 10) {
+        const sorted = [...rmsVals].sort((a, b) => a - b);
+        const q = (p) => sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))];
+        dynRange = q(0.95) - q(0.10);
+    }
+
+    const levelColor = (db) => {
+        if (!isLevel(db)) return 'color: #333;';
+        if (db > -6) return 'color: #ff0000; font-weight: bold;';
+        if (db > -12) return 'color: #ff4444;';
+        if (db > -18) return 'color: #ff9900;';
+        if (db > -30) return 'color: #ffcc00;';
+        return 'color: #00ff00;';
+    };
+    const bandColor = (db) => {
+        if (!isLevel(db)) return 'color: #333;';
+        if (db > -20) return 'color: #ff0000; font-weight: bold;';
+        if (db > -30) return 'color: #ff4444;';
+        if (db > -42) return 'color: #ff9900;';
+        if (db > -55) return 'color: #ffcc00;';
+        return 'color: #00ff00;';
+    };
+
+    const rows = exportData.map((d) => {
+        const bandCells = REC_BANDS.map((b) =>
+            `<td style="${bandColor(d.bands[b.key])}">${fmtDb(d.bands[b.key], 2)}</td>`).join('');
+        return `
             <tr>
-                <td>${data.time}</td>
-                <td style="${getColor(data.subBass)}">${data.subBass}</td>
-                <td style="${getColor(data.bass)}">${data.bass}</td>
-                <td style="${getColor(data.lowMid)}">${data.lowMid}</td>
-                <td style="${getColor(data.mid)}">${data.mid}</td>
-                <td style="${getColor(data.highMid)}">${data.highMid}</td>
-                <td style="${getColor(data.presence)}">${data.presence}</td>
-                <td style="${getColor(data.brilliance)}">${data.brilliance}</td>
-                <td style="${getColor(data.air)}">${data.air}</td>
-                <td style="${getColor(data.rms)}">${data.rms}</td>
-                <td style="${getColor(data.truePeak)}">${data.truePeak}</td>
-                <td>${data.crestFactor}</td>
-                <td>${data.dynamicRange}</td>
-                <td>${data.stereoBalance}</td>
+                <td>${d.t.toFixed(2)}</td>
+                ${bandCells}
+                <td style="${levelColor(d.rms)}">${fmtDb(d.rms, 2)}</td>
+                <td style="${levelColor(d.peak)}">${fmtDb(d.peak, 2)}</td>
+                <td>${d.crest.toFixed(2)}</td>
+                <td>${d.peakFreq ? Math.round(d.peakFreq) : '-'}</td>
+                <td>${d.balance.toFixed(2)}</td>
             </tr>`;
-        });
-        
-        return `<!DOCTYPE html>
+    }).join('');
+
+    const safeName = escapeHtml(fileName);
+    const sampleRate = audioContext ? audioContext.sampleRate : '?';
+
+    return `<!DOCTYPE html>
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <title>PRO Audio Analysis: ${fileName}</title>
+    <title>PRO Audio Analysis: ${safeName}</title>
     <style>
-        body {
-            background: #0a0a0a;
-            color: white;
-            font-family: 'Courier New', monospace;
-            padding: 20px;
-        }
-        h1 {
-            color: #ffcc00;
-            text-align: center;
-            border-bottom: 3px solid #4477ff;
-            padding-bottom: 10px;
-        }
-        h2 {
-            color: #4477ff;
-            margin-top: 30px;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-            font-size: 0.9em;
-        }
-        .table-container {
-            max-height: 600px;
-            overflow-y: auto;
-            border: 2px solid #333;
-            border-radius: 5px;
-        }
-        .table-container::-webkit-scrollbar {
-            width: 12px;
-        }
-        .table-container::-webkit-scrollbar-track {
-            background: #0a0a0a;
-        }
-        .table-container::-webkit-scrollbar-thumb {
-            background: #ffcc00;
-            border-radius: 6px;
-        }
-        .table-container::-webkit-scrollbar-thumb:hover {
-            background: #ff9900;
-        }
-        th {
-            background: #1a1a1a;
-            color: #ffcc00;
-            padding: 10px 8px;
-            border: 1px solid #333;
-            text-align: center;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            font-size: 0.85em;
-        }
-        td {
-            padding: 8px 6px;
-            border: 1px solid #333;
-            text-align: center;
-            background: #111;
-        }
-        tr:hover {
-            background: #1a1a1a;
-        }
-        .info {
-            background: #1a1a1a;
-            padding: 15px;
-            border-left: 4px solid #ffcc00;
-            margin: 20px 0;
-        }
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
-            margin: 20px 0;
-        }
-        .stat-box {
-            background: #1a1a1a;
-            padding: 15px;
-            border: 2px solid #333;
-            border-radius: 5px;
-        }
-        .stat-label {
-            color: #888;
-            font-size: 0.9em;
-        }
-        .stat-value {
-            color: #ffcc00;
-            font-size: 1.8em;
-            font-weight: bold;
-            margin-top: 5px;
-        }
-        .warning {
-            background: #331a00;
-            border-left: 4px solid #ff9900;
-            padding: 15px;
-            margin: 20px 0;
-        }
+        body { background: #0a0a0a; color: white; font-family: 'Courier New', monospace; padding: 20px; }
+        h1 { color: #ffcc00; text-align: center; border-bottom: 3px solid #4477ff; padding-bottom: 10px; }
+        h2 { color: #4477ff; margin-top: 30px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.9em; }
+        .table-container { max-height: 600px; overflow-y: auto; border: 2px solid #333; border-radius: 5px; }
+        .table-container::-webkit-scrollbar { width: 12px; }
+        .table-container::-webkit-scrollbar-track { background: #0a0a0a; }
+        .table-container::-webkit-scrollbar-thumb { background: #ffcc00; border-radius: 6px; }
+        .table-container::-webkit-scrollbar-thumb:hover { background: #ff9900; }
+        th { background: #1a1a1a; color: #ffcc00; padding: 10px 8px; border: 1px solid #333; text-align: center; position: sticky; top: 0; z-index: 10; font-size: 0.85em; }
+        td { padding: 8px 6px; border: 1px solid #333; text-align: center; background: #111; }
+        tr:hover td { background: #1a1a1a; }
+        .info { background: #1a1a1a; padding: 15px; border-left: 4px solid #ffcc00; margin: 20px 0; }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 20px 0; }
+        .stat-box { background: #1a1a1a; padding: 15px; border: 2px solid #333; border-radius: 5px; }
+        .stat-label { color: #888; font-size: 0.9em; }
+        .stat-value { color: #ffcc00; font-size: 1.8em; font-weight: bold; margin-top: 5px; }
+        .warning { background: #331a00; border-left: 4px solid #ff9900; padding: 15px; margin: 20px 0; }
     </style>
 </head>
 <body>
     <h1>🖖 LCARS PRO AUDIO ANALYSIS REPORT</h1>
-    
+
     <div class="info">
-        <strong>📁 Soubor:</strong> ${fileName}<br>
-        <strong>📊 Celková délka záznamu:</strong> ${exportData.length} vzorků<br>
-        <strong>⏱️ Interval vzorkování:</strong> 0.10s (přesný timer, 100ms)<br>
-        <strong>🔬 FFT velikost:</strong> 2048 (1024 frekvenčních binů)<br>
+        <strong>📁 Soubor:</strong> ${safeName}<br>
+        <strong>📊 Počet vzorků:</strong> ${exportData.length}<br>
+        <strong>⏱️ Interval vzorkování:</strong> 0.10 s (100 ms)<br>
+        <strong>🔬 FFT velikost:</strong> ${FFT_SIZE} (${FFT_SIZE / 2} frekvenčních binů), vzorkovací frekvence ${sampleRate} Hz<br>
         <strong>📅 Datum analýzy:</strong> ${new Date().toLocaleString('cs-CZ')}<br>
-        <strong>✅ Metoda:</strong> dBFS (decibels Full Scale) - profesionální standard
+        <strong>✅ Metoda:</strong> RMS a True Peak z časové oblasti (dBFS), pásma z FFT (dB, výkonový průměr)
     </div>
-    
+
     <h2>📈 Celkové statistiky</h2>
     <div class="stats">
         <div class="stat-box">
             <div class="stat-label">Průměrná RMS hlasitost</div>
-            <div class="stat-value">${avgRMS} dB</div>
+            <div class="stat-value">${fmtDb(avgRms, 2)} dBFS</div>
         </div>
         <div class="stat-box">
             <div class="stat-label">Maximální True Peak</div>
-            <div class="stat-value">${maxPeak} dB</div>
+            <div class="stat-value">${fmtDb(maxPeak, 2)} dBFS</div>
         </div>
         <div class="stat-box">
             <div class="stat-label">Průměrný Crest Factor</div>
-            <div class="stat-value">${avgCrest}</div>
+            <div class="stat-value">${avgCrest.toFixed(2)}</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-label">Dynamický rozsah (P95−P10)</div>
+            <div class="stat-value">${dynRange === null ? 'N/A' : dynRange.toFixed(1) + ' dB'}</div>
         </div>
     </div>
-    
-    ${parseFloat(maxPeak) > -1 ? `<div class="warning">
-        ⚠️ <strong>VAROVÁNÍ:</strong> Detekován clipping! True Peak překračuje -1 dBFS. 
+
+    ${maxPeak > -1 ? `<div class="warning">
+        ⚠️ <strong>VAROVÁNÍ:</strong> Detekován clipping! True Peak překračuje -1 dBFS.
         Doporučení: Snižte celkovou hlasitost nebo použijte limiter.
     </div>` : ''}
-    
+
     <h2>📊 Detailní Časová Osa (Timeline)</h2>
-    <p>Záznam všech 8 pásem + profesionální metriky v čase (interval 0.1s)</p>
-    
+    <p>Záznam všech 8 pásem + profesionální metriky v čase (interval 0.1 s)</p>
+
     <div class="table-container">
     <table>
         <thead>
             <tr>
                 <th>Čas<br>(s)</th>
-                <th>Sub-Bass<br>(dBFS)</th>
-                <th>Bass<br>(dBFS)</th>
-                <th>Low-Mid<br>(dBFS)</th>
-                <th>Mid<br>(dBFS)</th>
-                <th>High-Mid<br>(dBFS)</th>
-                <th>Presence<br>(dBFS)</th>
-                <th>Brilliance<br>(dBFS)</th>
-                <th>Air<br>(dBFS)</th>
+                <th>Sub-Bass<br>(dB)</th>
+                <th>Bass<br>(dB)</th>
+                <th>Low-Mid<br>(dB)</th>
+                <th>Mid<br>(dB)</th>
+                <th>High-Mid<br>(dB)</th>
+                <th>Presence<br>(dB)</th>
+                <th>Brilliance<br>(dB)</th>
+                <th>Air<br>(dB)</th>
                 <th>RMS<br>(dBFS)</th>
                 <th>True Peak<br>(dBFS)</th>
                 <th>Crest<br>Factor</th>
-                <th>Dynamic<br>Range</th>
-                <th>Stereo<br>Balance</th>
+                <th>Peak Freq<br>(Hz)</th>
+                <th>Stereo<br>Balance (dB)</th>
             </tr>
         </thead>
         <tbody>
@@ -691,24 +1017,38 @@ function updateVUMeter(barId, textId, level) {
         </tbody>
     </table>
     </div>
-    
+
     <div class="info" style="margin-top: 30px;">
-        <strong>📖 Legenda barev (dBFS):</strong><br>
-        <span style="color: #00ff00;">🟢 Zelená: -∞ až -30 dB (nízká úroveň)</span><br>
-        <span style="color: #ffcc00;">🟡 Žlutá: -30 až -18 dB (střední úroveň)</span><br>
-        <span style="color: #ff9900;">🟠 Oranžová: -18 až -12 dB (vysoká úroveň)</span><br>
-        <span style="color: #ff4444;">🔴 Červená: -12 až -6 dB (velmi vysoká úroveň)</span><br>
-        <span style="color: #ff0000; font-weight: bold;">🔴 KRITICKÁ: -6 dB a více (CLIPPING!)</span>
+        <strong>📖 Legenda barev - RMS a True Peak (dBFS):</strong><br>
+        <span style="color: #00ff00;">🟢 Zelená: -∞ až -30 dB</span><br>
+        <span style="color: #ffcc00;">🟡 Žlutá: -30 až -18 dB</span><br>
+        <span style="color: #ff9900;">🟠 Oranžová: -18 až -12 dB</span><br>
+        <span style="color: #ff4444;">🔴 Červená: -12 až -6 dB</span><br>
+        <span style="color: #ff0000; font-weight: bold;">🔴 KRITICKÁ: nad -6 dB</span><br><br>
+        <strong>📖 Legenda barev - frekvenční pásma (relativní spektrální úroveň, dB):</strong><br>
+        <span style="color: #00ff00;">🟢 pod -55</span> ·
+        <span style="color: #ffcc00;">🟡 -55 až -42</span> ·
+        <span style="color: #ff9900;">🟠 -42 až -30</span> ·
+        <span style="color: #ff4444;">🔴 -30 až -20</span> ·
+        <span style="color: #ff0000; font-weight: bold;">🔴 nad -20</span>
     </div>
-    
+
     <div class="info">
         <strong>📚 Vysvětlení metrik:</strong><br><br>
-        <strong>RMS (Root Mean Square):</strong> Skutečná hlasitost, jak ji vnímá lidské ucho<br>
-        <strong>True Peak:</strong> Absolutní maximum signálu (mělo by být pod 0 dBFS!)<br>
+        <strong>RMS:</strong> Skutečná hlasitost z časové oblasti signálu (L+R)<br>
+        <strong>True Peak:</strong> Nejvyšší vzorek signálu (mělo by být pod 0 dBFS!)<br>
         <strong>Crest Factor:</strong> Poměr peak/RMS (vyšší = dynamičtější mix, 2-6 je normální)<br>
-        <strong>Dynamic Range:</strong> Rozdíl mezi nejhlasitějším a nejtišším (vyšší = lepší)<br>
-        <strong>Stereo Balance:</strong> Poměr L/R kanálů (1.0 = perfektně vyvážené)
+        <strong>Dynamický rozsah:</strong> Rozdíl mezi hlasitými (P95) a tichými (P10) pasážemi podle RMS (vyšší = dynamičtější)<br>
+        <strong>Peak Freq:</strong> Frekvence s nejvyšší energií v daném okamžiku<br>
+        <strong>Stereo Balance:</strong> Rozdíl L/R v dB (0 = vyvážené, kladné = víc vlevo, záporné = víc vpravo)
     </div>
 </body>
 </html>`;
-    }
+}
+
+/* --------------------------------------------------------------------------
+   START
+   -------------------------------------------------------------------------- */
+
+resetVU();
+drawAll();

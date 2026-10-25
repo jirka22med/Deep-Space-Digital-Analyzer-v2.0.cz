@@ -638,14 +638,14 @@ function renderFrame(dt) {
         ana.getByteTimeDomainData(buf);  */
 
         // Auto-gain: tichá pásma se zvětší, hlasitá se hned stáhnou (nic nepřetéká)
-        let dev = 0;
+    /*    let dev = 0;
         for (let i = 0; i < buf.length; i++) {
             const d = Math.abs(buf[i] - 128) / 128;
             if (d > dev) dev = d;
         }
         const target = clamp(0.75 / Math.max(dev, 0.015), lane.gain, lane.maxGain);
-        lane.cur = target < lane.cur ? target : lane.cur + (target - lane.cur) * 0.04;
-    });
+        lane.cur = target < lane.cur ? target : lane.cur + (target - lane.cur) * 0.04;   */
+    }
 
     drawAll();
 

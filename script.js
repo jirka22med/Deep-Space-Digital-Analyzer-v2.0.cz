@@ -645,7 +645,7 @@ function renderFrame(dt) {
         }
         const target = clamp(0.75 / Math.max(dev, 0.015), lane.gain, lane.maxGain);
         lane.cur = target < lane.cur ? target : lane.cur + (target - lane.cur) * 0.04;   */
-    }
+     
 
     drawAll();
 

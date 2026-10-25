@@ -51,7 +51,7 @@ const REC_BANDS = [
 
 const FFT_SIZE = 8192;      // hlavní analyser (4096 binů)
 const TD_SIZE = 2048;       // L/R analysery
-const SCOPE_SIZE = 1024;    // osciloskop pásem
+// const SCOPE_SIZE = 1024;    // osciloskop pásem
 const VU_FLOOR_DB = -60;
 
 /* --------------------------------------------------------------------------
@@ -395,7 +395,7 @@ function drawMainCanvas() {
     ctx.stroke();
     ctx.restore();
 
-    // osciloskop - 4 patra se svitem
+  /*  // osciloskop - 4 patra se svitem
     const top = specH + 8;
     const laneH = (h - top - 2) / SCOPE_LANES.length;
     SCOPE_LANES.forEach((lane, i) => {
@@ -440,7 +440,7 @@ function drawAll() {
     miniSpec.clear();
     miniSpec.drawBars(0, 0, miniSpec.w, miniSpec.h);
 }
-
+  */
 /* --------------------------------------------------------------------------
    VU METRY (RMS z časové oblasti + peak-hold značka)
    -------------------------------------------------------------------------- */

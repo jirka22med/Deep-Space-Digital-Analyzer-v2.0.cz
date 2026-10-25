@@ -34,7 +34,7 @@ const RADAR_BANDS = [
     { label: 'Mid',      f0: 500,   f1: 2000 },
     { label: 'High-Mid', f0: 2000,  f1: 6000 },
     { label: 'Treble',   f0: 6000,  f1: 12000 },
-    { label: 'Air',      f0: 12000, f1: 20000, trimDb: 8 }
+    { label: 'Air',      f0: 12000, f1: 20000, trimDb: 12 }
 ];
 
 // 8 pásem pro export

@@ -631,11 +631,11 @@ function renderFrame(dt) {
     mainSpec.update(specData, binHz, dt);
     miniSpec.update(specData, binHz, dt);
 
-    SCOPE_LANES.forEach((lane) => {
+  /*  SCOPE_LANES.forEach((lane) => {
         const ana = scopeAnalysers[lane.key];
         if (!ana) return;
         const buf = scopeBuffers[lane.key];
-        ana.getByteTimeDomainData(buf);
+        ana.getByteTimeDomainData(buf);  */
 
         // Auto-gain: tichá pásma se zvětší, hlasitá se hned stáhnou (nic nepřetéká)
         let dev = 0;

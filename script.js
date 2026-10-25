@@ -16,15 +16,7 @@ const exportCsvBtn = $('exportCsvBtn');
    KONFIGURACE
    -------------------------------------------------------------------------- */
 
-/* // 4 patra osciloskopu (pořadí a barvy podle původního analyzéru)
-const SCOPE_LANES = [
-    { key: 'bass',   label: 'BASY',   color: '#ff4444', gain: 3.0 },
-    { key: 'mid',    label: 'STŘEDY', color: '#00ff88', gain: 2.0 },
-    { key: 'high',   label: 'VÝŠKY',  color: '#4477ff', gain: 4.0 },
-    { key: 'vocals', label: 'VOKÁLY', color: '#ff9900', gain: 2.5 }
-]; */
-// Automatické zesílení: lane.gain je minimum, lane.cur aktuální hodnota, lane.maxGain strop
-SCOPE_LANES.forEach((lane) => { lane.cur = lane.gain; lane.maxGain = 24; });
+
 
 // Pásma pro radar
 const RADAR_BANDS = [
@@ -51,7 +43,7 @@ const REC_BANDS = [
 
 const FFT_SIZE = 8192;      // hlavní analyser (4096 binů)
 const TD_SIZE = 2048;       // L/R analysery
-//const SCOPE_SIZE = 1024;    // osciloskop pásem
+
 const VU_FLOOR_DB = -60;
 
 /* --------------------------------------------------------------------------
@@ -395,45 +387,7 @@ function drawMainCanvas() {
     ctx.stroke();
     ctx.restore();
 
- /*   // osciloskop - 4 patra se svitem
-    const top = specH + 8;
-    const laneH = (h - top - 2) / SCOPE_LANES.length;
-    SCOPE_LANES.forEach((lane, i) => {
-        const cy = top + laneH * (i + 0.5);
-        const half = Math.max(2, laneH / 2 - 2);
-        const buf = scopeBuffers[lane.key];
-        const step = w / (buf.length - 1);
 
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, cy);
-        ctx.lineTo(w, cy);
-        ctx.stroke();
-
-        ctx.shadowColor = lane.color;
-        ctx.shadowBlur = 6;
-        ctx.strokeStyle = lane.color;
-        ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        for (let j = 0; j < buf.length; j++) {
-            const v = clamp(((buf[j] - 128) / 128) * lane.cur, -1, 1);
-            const px = j * step;
-            const py = cy - v * half;
-            if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-        ctx.restore();
-
-        ctx.save();
-        ctx.fillStyle = lane.color;
-        ctx.font = '600 11px "JetBrains Mono", Consolas, monospace';
-        ctx.textAlign = 'left';
-        ctx.fillText(lane.label, 6, top + laneH * i + 12);
-        ctx.restore();
-    });
-}   */
 
 function drawAll() {
     drawMainCanvas();
@@ -568,23 +522,7 @@ function setupAudioChain() {
 
     source = audioContext.createMediaElementSource(audioElement);
 
-   /* // Filtrační kaskáda pro 4 patra osciloskopu
-    const createBranch = (key, type, freq, Q = 1) => {
-        const filter = audioContext.createBiquadFilter();
-        filter.type = type;
-        filter.frequency.value = freq;
-        filter.Q.value = Q;
-        const ana = audioContext.createAnalyser();
-        ana.fftSize = SCOPE_SIZE;
-        source.connect(filter);
-        filter.connect(ana);
-        scopeAnalysers[key] = ana;
-    };
-    createBranch('bass',   'lowpass',  150);
-    createBranch('mid',    'bandpass', 500);
-    createBranch('vocals', 'bandpass', 1500, 2);
-    createBranch('high',   'highpass', 5000);
-    */
+   
 
     // Přehrávání + analýza
     source.connect(analyser);

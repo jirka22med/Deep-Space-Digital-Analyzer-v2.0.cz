@@ -673,7 +673,7 @@ function resetVisuals() {
     resetVU();
     mainSpec.reset();
     miniSpec.reset();
-    SCOPE_LANES.forEach((lane) => { scopeBuffers[lane.key].fill(128); lane.cur = lane.gain; });
+     
     radarChart.data.datasets[0].data = RADAR_BANDS.map(() => 0);
     radarChart.update('none');
     resetInfoPanel();

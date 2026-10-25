@@ -389,44 +389,7 @@ function drawMainCanvas() {
     ctx.lineTo(w, specH + 4.5);
     ctx.stroke();
     ctx.restore();
-
-    // osciloskop - 4 patra se svitem
-    const top = specH + 8;
-    const laneH = (h - top - 2) / SCOPE_LANES.length;
-    SCOPE_LANES.forEach((lane, i) => {
-        const cy = top + laneH * (i + 0.5);
-        const half = Math.max(2, laneH / 2 - 2);
-        const buf = scopeBuffers[lane.key];
-        const step = w / (buf.length - 1);
-
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, cy);
-        ctx.lineTo(w, cy);
-        ctx.stroke();
-
-        ctx.shadowColor = lane.color;
-        ctx.shadowBlur = 6;
-        ctx.strokeStyle = lane.color;
-        ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        for (let j = 0; j < buf.length; j++) {
-            const v = clamp(((buf[j] - 128) / 128) * lane.cur, -1, 1);
-            const px = j * step;
-            const py = cy - v * half;
-            if (j === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-        ctx.restore();
-
-        ctx.save();
-        ctx.fillStyle = lane.color;
-        ctx.font = '600 11px "JetBrains Mono", Consolas, monospace';
-        ctx.textAlign = 'left';
-        ctx.fillText(lane.label, 6, top + laneH * i + 12);
-        ctx.restore();
+   
     });
 }
 

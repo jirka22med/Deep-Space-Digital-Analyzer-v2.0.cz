@@ -17,12 +17,7 @@ const exportCsvBtn = $('exportCsvBtn');
    -------------------------------------------------------------------------- */
 
 // 4 patra osciloskopu (pořadí a barvy podle původního analyzéru)
-const SCOPE_LANES = [
-    { key: 'bass',   label: 'BASY',   color: '#ff4444', gain: 3.0 },
-    { key: 'mid',    label: 'STŘEDY', color: '#00ff88', gain: 2.0 },
-    { key: 'high',   label: 'VÝŠKY',  color: '#4477ff', gain: 4.0 },
-    { key: 'vocals', label: 'VOKÁLY', color: '#ff9900', gain: 2.5 }
-];
+
 // Automatické zesílení: lane.gain je minimum, lane.cur aktuální hodnota, lane.maxGain strop
 SCOPE_LANES.forEach((lane) => { lane.cur = lane.gain; lane.maxGain = 24; });
 

@@ -64,7 +64,7 @@ let tdPeak = new Float32Array(FFT_SIZE);
 
 const scopeAnalysers = {};
 const scopeBuffers = {};
-SCOPE_LANES.forEach((lane) => { scopeBuffers[lane.key] = new Uint8Array(SCOPE_SIZE).fill(128); });
+ 
 
 let currentFileName = 'audio';
 let currentUrl = null;

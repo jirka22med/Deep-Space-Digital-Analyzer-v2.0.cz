@@ -390,7 +390,7 @@ function drawMainCanvas() {
     ctx.stroke();
     ctx.restore();
    
-    });
+    }
 }
 
 function drawAll() {

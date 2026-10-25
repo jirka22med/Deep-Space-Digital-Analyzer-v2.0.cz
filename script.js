@@ -16,13 +16,13 @@ const exportCsvBtn = $('exportCsvBtn');
    KONFIGURACE
    -------------------------------------------------------------------------- */
 
-// 4 patra osciloskopu (pořadí a barvy podle původního analyzéru)
+/* // 4 patra osciloskopu (pořadí a barvy podle původního analyzéru)
 const SCOPE_LANES = [
     { key: 'bass',   label: 'BASY',   color: '#ff4444', gain: 3.0 },
     { key: 'mid',    label: 'STŘEDY', color: '#00ff88', gain: 2.0 },
     { key: 'high',   label: 'VÝŠKY',  color: '#4477ff', gain: 4.0 },
     { key: 'vocals', label: 'VOKÁLY', color: '#ff9900', gain: 2.5 }
-];
+]; */
 // Automatické zesílení: lane.gain je minimum, lane.cur aktuální hodnota, lane.maxGain strop
 SCOPE_LANES.forEach((lane) => { lane.cur = lane.gain; lane.maxGain = 24; });
 
@@ -51,7 +51,7 @@ const REC_BANDS = [
 
 const FFT_SIZE = 8192;      // hlavní analyser (4096 binů)
 const TD_SIZE = 2048;       // L/R analysery
-// const SCOPE_SIZE = 1024;    // osciloskop pásem
+//const SCOPE_SIZE = 1024;    // osciloskop pásem
 const VU_FLOOR_DB = -60;
 
 /* --------------------------------------------------------------------------
@@ -395,7 +395,7 @@ function drawMainCanvas() {
     ctx.stroke();
     ctx.restore();
 
-  /*  // osciloskop - 4 patra se svitem
+ /*   // osciloskop - 4 patra se svitem
     const top = specH + 8;
     const laneH = (h - top - 2) / SCOPE_LANES.length;
     SCOPE_LANES.forEach((lane, i) => {
@@ -433,14 +433,14 @@ function drawMainCanvas() {
         ctx.fillText(lane.label, 6, top + laneH * i + 12);
         ctx.restore();
     });
-}
+}   */
 
 function drawAll() {
     drawMainCanvas();
     miniSpec.clear();
     miniSpec.drawBars(0, 0, miniSpec.w, miniSpec.h);
 }
-  */
+
 /* --------------------------------------------------------------------------
    VU METRY (RMS z časové oblasti + peak-hold značka)
    -------------------------------------------------------------------------- */
@@ -568,7 +568,7 @@ function setupAudioChain() {
 
     source = audioContext.createMediaElementSource(audioElement);
 
-    // Filtrační kaskáda pro 4 patra osciloskopu
+   /* // Filtrační kaskáda pro 4 patra osciloskopu
     const createBranch = (key, type, freq, Q = 1) => {
         const filter = audioContext.createBiquadFilter();
         filter.type = type;
@@ -584,6 +584,7 @@ function setupAudioChain() {
     createBranch('mid',    'bandpass', 500);
     createBranch('vocals', 'bandpass', 1500, 2);
     createBranch('high',   'highpass', 5000);
+    */
 
     // Přehrávání + analýza
     source.connect(analyser);

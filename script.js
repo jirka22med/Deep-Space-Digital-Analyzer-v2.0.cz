@@ -34,7 +34,7 @@ const RADAR_BANDS = [
     { label: 'Mid',      f0: 500,   f1: 2000 },
     { label: 'High-Mid', f0: 2000,  f1: 6000 },
     { label: 'Treble',   f0: 6000,  f1: 12000 },
-    { label: 'Air',      f0: 12000, f1: 20000 }
+    { label: 'Air',      f0: 12000, f1: 20000, trimDb: 6 }
 ];
 
 // 8 pásem pro export
@@ -213,7 +213,7 @@ const radarChart = new Chart($('radarChart').getContext('2d'), {
 function updateRadar() {
     const binHz = getBinHz();
     radarChart.data.datasets[0].data = RADAR_BANDS.map((b) =>
-        clamp((bandPowerDb(specData, binHz, b.f0, b.f1) + 90) / 65, 0, 1) * 100
+    clamp((bandPowerDb(specData, binHz, b.f0, b.f1) + (b.trimDb || 0) + 90) / 65, 0, 1) * 100
     );
     radarChart.update('none');
 }

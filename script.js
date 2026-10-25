@@ -391,7 +391,7 @@ function drawMainCanvas() {
     ctx.restore();
    
     }
-}
+
 
 function drawAll() {
     drawMainCanvas();

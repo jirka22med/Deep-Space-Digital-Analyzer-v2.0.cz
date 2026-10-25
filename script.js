@@ -19,7 +19,7 @@ const exportCsvBtn = $('exportCsvBtn');
 // 4 patra osciloskopu (pořadí a barvy podle původního analyzéru)
 
 // Automatické zesílení: lane.gain je minimum, lane.cur aktuální hodnota, lane.maxGain strop
-SCOPE_LANES.forEach((lane) => { lane.cur = lane.gain; lane.maxGain = 24; });
+ 
 
 // Pásma pro radar
 const RADAR_BANDS = [

@@ -333,8 +333,15 @@ input[type="range"] {
 }
 
 /* ⚡ Kontejnery 1 a 5 - zúžené na 75% */
-#kontejner1, #kontejner5 {
+#kontejner1{
     height: 100%;
+    width: 75%;
+    margin: 0 auto;
+    overflow: hidden;
+}
+
+#kontejner5 {
+    height: 80%;
     width: 75%;
     margin: 0 auto;
     overflow: hidden;

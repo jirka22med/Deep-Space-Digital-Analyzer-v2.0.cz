@@ -377,7 +377,7 @@ function drawMainCanvas() {
     const w = s.w, h = s.h;
     s.clear();
 
-    const specH = Math.round(h * 0.5);
+    const specH = h;
     s.drawBars(0, 0, w, specH);
 
     // oddělovač

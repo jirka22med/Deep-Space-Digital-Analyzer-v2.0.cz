@@ -233,6 +233,8 @@ class SpectrumRenderer {
         this.levels = new Float32Array(this.bars);
         this.peaks = new Float32Array(this.bars);
         this.vel = new Float32Array(this.bars);
+        this.shown = new Float32Array(this.bars);   // hodnoty pro číselné popisky (obnovují se ~4× za sekundu, ať jdou přečíst)
+        this.labelClock = 0;
         this.w = 1;
         this.h = 1;
         this.resize();
@@ -256,6 +258,7 @@ class SpectrumRenderer {
         this.levels.fill(0);
         this.peaks.fill(0);
         this.vel.fill(0);
+        this.shown.fill(0);
     }
 
     update(spec, binHz, dt) {
@@ -284,6 +287,13 @@ class SpectrumRenderer {
                 this.vel[i] += 0.001 * k;
                 this.peaks[i] = Math.max(0, this.peaks[i] - this.vel[i] * k);
             }
+        }
+
+        // číselné popisky: obnovit ~4× za sekundu
+        this.labelClock += dt;
+        if (this.labelClock >= 0.25) {
+            this.labelClock = 0;
+            this.shown.set(this.levels);
         }
     }
 
@@ -337,6 +347,31 @@ class SpectrumRenderer {
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(bx, baseY - ph - 2, bw, 2);
             }
+        }
+
+        // hodnoty ve spodní části každého sloupce: nahoře úroveň v dB, pod ní střed pásma v Hz
+        // (zobrazí se jen tehdy, když se čtyřznakový popisek vejde do šířky sloupce)
+        if (this.labels && bw >= 24) {
+            const ratio = Math.pow(this.fmax / this.fmin, 1 / n);
+            ctx.font = '9px "JetBrains Mono", Consolas, monospace';
+            ctx.textAlign = 'center';
+            ctx.shadowColor = 'rgba(0,0,0,0.85)';
+            ctx.shadowBlur = 3;
+            ctx.fillStyle = 'rgba(255,255,255,0.92)';
+            for (let i = 0; i < n; i++) {
+                const cx = x + i * (bw + this.gap) + bw / 2;
+                const db = this.dbMin + this.shown[i] * (this.dbMax - this.dbMin);
+                const fc = this.fmin * Math.pow(ratio, i + 0.5);
+                const fTxt = fc >= 10000 ? `${Math.round(fc / 1000)}k`
+                           : fc >= 1000 ? `${(fc / 1000).toFixed(1)}k`
+                           : `${Math.round(fc)}`;
+                ctx.fillText(this.shown[i] < 0.005 ? '<-90' : `${Math.round(db)}`, cx, baseY - 15);
+                ctx.fillText(fTxt, cx, baseY - 4);
+            }
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.font = '10px "JetBrains Mono", Consolas, monospace';
+            ctx.textAlign = 'left';
         }
 
         // dB popisky až nad sloupci, na tmavém podkladu, ať je nic nezakrývá

@@ -349,10 +349,9 @@ class SpectrumRenderer {
             }
         }
 
-        // hodnoty ve spodní části každého sloupce: nahoře úroveň v dB, pod ní střed pásma v Hz
+        // hodnota úrovně v dB ve spodní části každého sloupce
         // (zobrazí se jen tehdy, když se čtyřznakový popisek vejde do šířky sloupce)
         if (this.labels && bw >= 24) {
-            const ratio = Math.pow(this.fmax / this.fmin, 1 / n);
             ctx.font = '9px "JetBrains Mono", Consolas, monospace';
             ctx.textAlign = 'center';
             ctx.shadowColor = 'rgba(0,0,0,0.85)';
@@ -361,12 +360,7 @@ class SpectrumRenderer {
             for (let i = 0; i < n; i++) {
                 const cx = x + i * (bw + this.gap) + bw / 2;
                 const db = this.dbMin + this.shown[i] * (this.dbMax - this.dbMin);
-                const fc = this.fmin * Math.pow(ratio, i + 0.5);
-                const fTxt = fc >= 10000 ? `${Math.round(fc / 1000)}k`
-                           : fc >= 1000 ? `${(fc / 1000).toFixed(1)}k`
-                           : `${Math.round(fc)}`;
-                ctx.fillText(this.shown[i] < 0.005 ? '<-90' : `${Math.round(db)}`, cx, baseY - 15);
-                ctx.fillText(fTxt, cx, baseY - 4);
+                ctx.fillText(this.shown[i] < 0.005 ? '<-90' : `${Math.round(db)}`, cx, baseY - 5);
             }
             ctx.shadowColor = 'transparent';
             ctx.shadowBlur = 0;

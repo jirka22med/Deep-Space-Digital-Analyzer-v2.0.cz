@@ -20,7 +20,7 @@
     const CFG = {
         width: 1920, height: 1080,             // výchozí velikost plovoucího okna
         bars: 32, fmin: 30, fmax: 18000,     // 32 sloupců se do malého okna vejdou i s dB popisky
-        fallbackW: 960, fallbackH: 300, fallbackFps: 30,
+        fallbackW: 1920, fallbackH: 1080, fallbackFps: 60,
         buttonId: 'lcarsPipBtn'
     };
 

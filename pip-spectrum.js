@@ -18,7 +18,7 @@
     if (window.LcarsPipSpectrum) return;
 
     const CFG = {
-        width: 900, height: 300,             // výchozí velikost plovoucího okna
+        width: 1500, height: 1100,             // výchozí velikost plovoucího okna
         bars: 32, fmin: 30, fmax: 18000,     // 32 sloupců se do malého okna vejdou i s dB popisky
         fallbackW: 960, fallbackH: 300, fallbackFps: 30,
         popupScale: 0.9,                     // velikost běžného okna: podíl využitelné plochy obrazovky

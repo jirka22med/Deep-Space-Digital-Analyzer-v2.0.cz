@@ -18,10 +18,11 @@
     if (window.LcarsPipSpectrum) return;
 
     const CFG = {
-        width: 10000, height: 10000,             // výchozí velikost plovoucího okna
-        bars: 60, fmin: 90, fmax: 18000,     // 32 sloupců se do malého okna vejdou i s dB popisky
-        fallbackW: 20000, fallbackH: 20000, fallbackFps: 160,
-        buttonId: 'lcarsPipBtn'
+        width: 900, height: 300,             // výchozí velikost plovoucího okna
+        bars: 32, fmin: 30, fmax: 18000,     // 32 sloupců se do malého okna vejdou i s dB popisky
+        fallbackW: 960, fallbackH: 300, fallbackFps: 30,
+        popupScale: 0.9,                     // velikost běžného okna: podíl využitelné plochy obrazovky
+        buttonId: 'lcarsPipBtn', winButtonId: 'lcarsWinBtn'
     };
 
     let pipWin = null;                // okno z Document PiP
@@ -29,7 +30,8 @@
     let renderer = null;
     let spec = null;
     let rafId = 0, timerId = 0, lastTs = 0;
-    let btn = null;
+    let btn = null, winBtn = null;
+    let mode = '';                    // '' | 'pip' | 'popup' | 'video'
 
     /* ------------------------------------------------------------------
        NAPOJENÍ NA script.js (globální let/const/class z klasického <script>)
@@ -109,7 +111,13 @@
         const win = await window.documentPictureInPicture.requestWindow({
             width: CFG.width, height: CFG.height
         });
+        attachWindow(win, 'pip', g);
+    }
+
+    // Společné pro Document PiP okno i běžné velké okno: plátno + vlastní smyčka kreslení v daném okně
+    function attachWindow(win, kind, g) {
         pipWin = win;
+        mode = kind;
 
         const doc = win.document;
         doc.title = 'LCARS • Spektrum';
@@ -119,6 +127,15 @@
         doc.head.appendChild(style);
         const canvas = doc.createElement('canvas');
         doc.body.appendChild(canvas);
+        if (kind === 'popup') {
+            // dvojklik = celá obrazovka (v okně Document PiP celá obrazovka není povolená)
+            canvas.addEventListener('dblclick', () => {
+                try {
+                    if (doc.fullscreenElement) doc.exitFullscreen();
+                    else canvas.requestFullscreen();
+                } catch (e) { /* nic */ }
+            });
+        }
 
         renderer = makeRenderer(g.Renderer, canvas, null);
         spec = null;
@@ -136,6 +153,22 @@
         };
         rafId = win.requestAnimationFrame(frame);
         setState(true);
+    }
+
+    /* ------------------------------------------------------------------
+       VELKÉ OKNO: běžné okno prohlížeče bez limitu Document PiP (ten je 80 % obrazovky)
+       ------------------------------------------------------------------ */
+    function openPopup() {
+        const g = hooks();
+        if (!g) throw new Error('script.js (SpectrumRenderer) není dostupný - načti pip-spectrum.js až po script.js jako klasický <script>');
+        const sw = (window.screen && screen.availWidth) || 1280;
+        const sh = (window.screen && screen.availHeight) || 720;
+        const w = Math.round(sw * CFG.popupScale), h = Math.round(sh * CFG.popupScale);
+        const left = Math.round((sw - w) / 2), top = Math.round((sh - h) / 2);
+        const win = window.open('', 'lcarsSpectrumWindow',
+            'popup=yes,width=' + w + ',height=' + h + ',left=' + left + ',top=' + top);
+        if (!win) throw new Error('Prohlížeč zablokoval vyskakovací okno - povol je pro tuto stránku');
+        attachWindow(win, 'popup', g);
     }
 
     /* ------------------------------------------------------------------
@@ -183,9 +216,10 @@
        ------------------------------------------------------------------ */
     function isOpen() { return !!(pipWin || pipVideo); }
 
-    async function open() {
+    async function open(kind) {
         if (isOpen()) return;
         try {
+            if (kind === 'popup') { openPopup(); return; }
             if ('documentPictureInPicture' in window) {
                 try {
                     await openDocumentPip();
@@ -198,7 +232,7 @@
             await openVideoPip();
         } catch (e) {
             console.warn('[PiP spektrum]', e);
-            flash('PiP nelze otevřít');
+            flash(kind === 'popup' ? winBtn : btn, kind === 'popup' ? 'Okno nelze otevřít' : 'PiP nelze otevřít');
         }
     }
 
@@ -219,6 +253,7 @@
         }
         renderer = null;
         spec = null;
+        mode = '';
         setState(false);
     }
 
@@ -229,64 +264,85 @@
     }
 
     function toggle() { return isOpen() ? close() : open(); }
+    function toggleWindow() { return isOpen() ? close() : open('popup'); }
 
     /* ------------------------------------------------------------------
        TLAČÍTKO (v pravém horním rohu panelu se spektrem)
        ------------------------------------------------------------------ */
     function setState(on) {
         if (!btn) return;
-        btn.textContent = on ? '✖ Zavřít PiP' : '⧉ PiP';
-        btn.style.background = on ? '#6FA8DC' : '#FF9F1C';
-        btn.title = on ? 'Zavřít plovoucí okno se spektrem' : 'Otevřít spektrum v plovoucím okně (Picture-in-Picture)';
+        const popupOn = on && mode === 'popup';
+        const pipOn = on && !popupOn;
+        btn.textContent = pipOn ? '✖ Zavřít PiP' : '⧉ PiP';
+        btn.style.background = pipOn ? '#6FA8DC' : '#FF9F1C';
+        btn.title = pipOn ? 'Zavřít plovoucí okno se spektrem' : 'Otevřít spektrum v plovoucím okně (Picture-in-Picture)';
+        btn.style.display = popupOn ? 'none' : '';
+        if (winBtn) {
+            winBtn.textContent = popupOn ? '✖ Zavřít okno' : '⤢ Velké okno';
+            winBtn.style.background = popupOn ? '#6FA8DC' : '#C297D8';
+            winBtn.title = popupOn ? 'Zavřít velké okno se spektrem'
+                                   : 'Otevřít spektrum ve velkém okně bez omezení velikosti (dvojklik = celá obrazovka)';
+            winBtn.style.display = pipOn ? 'none' : '';
+        }
     }
 
-    function flash(text) {
-        if (!btn) return;
-        btn.textContent = text;
-        btn.style.background = '#CC6666';
+    function flash(target, text) {
+        if (!target) return;
+        target.textContent = text;
+        target.style.background = '#CC6666';
         setTimeout(() => setState(isOpen()), 2500);
     }
 
-    function buildButton() {
-        if (document.getElementById(CFG.buttonId)) return;
-        const supported = ('documentPictureInPicture' in window) || !!document.pictureInPictureEnabled;
-
-        btn = document.createElement('button');
-        btn.id = CFG.buttonId;
-        btn.type = 'button';
-        btn.style.cssText = [
-            'position:absolute', 'top:8px', 'right:10px', 'z-index:5',
+    function makeBtn(id) {
+        const b = document.createElement('button');
+        b.id = id;
+        b.type = 'button';
+        b.style.cssText = [
             'border:none', 'border-radius:999px', 'padding:4px 14px',
             'font:700 12px "Antonio","Arial Narrow",Arial,sans-serif',
             'letter-spacing:.05em', 'text-transform:uppercase',
             'color:#000', 'cursor:pointer', 'opacity:.92'
         ].join(';');
+        b.addEventListener('mouseenter', () => { b.style.opacity = '1'; });
+        b.addEventListener('mouseleave', () => { b.style.opacity = '.92'; });
+        return b;
+    }
+
+    function buildButton() {
+        if (document.getElementById(CFG.buttonId)) return;
+        const pipSupported = ('documentPictureInPicture' in window) || !!document.pictureInPictureEnabled;
+
+        const bar = document.createElement('div');
+        bar.style.cssText = 'position:absolute;top:8px;right:10px;z-index:5;display:flex;gap:6px';
+        btn = makeBtn(CFG.buttonId);
+        winBtn = makeBtn(CFG.winButtonId);
+        bar.appendChild(btn);
+        bar.appendChild(winBtn);
 
         const host = document.getElementById('spectrogramPlot') || document.body;
         if (host === document.body) {
-            btn.style.position = 'fixed';
+            bar.style.position = 'fixed';
         } else if (getComputedStyle(host).position === 'static') {
             host.style.position = 'relative';
         }
-        host.appendChild(btn);
+        host.appendChild(bar);
 
-        if (!supported) {
+        winBtn.addEventListener('click', toggleWindow);
+        if (pipSupported) {
+            btn.addEventListener('click', toggle);
+        } else {
             btn.disabled = true;
             btn.style.opacity = '.45';
             btn.style.cursor = 'not-allowed';
-            btn.textContent = '⧉ PiP';
             btn.style.background = '#888';
             btn.title = 'Tento prohlížeč Picture-in-Picture nepodporuje';
-            return;
         }
-        btn.addEventListener('mouseenter', () => { btn.style.opacity = '1'; });
-        btn.addEventListener('mouseleave', () => { btn.style.opacity = '.92'; });
-        btn.addEventListener('click', toggle);
         setState(false);
+        if (!pipSupported) { btn.style.background = '#888'; btn.title = 'Tento prohlížeč Picture-in-Picture nepodporuje'; }
     }
 
     window.addEventListener('pagehide', close);
-    window.LcarsPipSpectrum = { open: open, close: close, toggle: toggle, isOpen: isOpen, config: CFG };
+    window.LcarsPipSpectrum = { open: open, close: close, toggle: toggle, toggleWindow: toggleWindow, isOpen: isOpen, config: CFG };
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', buildButton);
